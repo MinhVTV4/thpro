@@ -1,953 +1,999 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { initializeApp } from 'firebase/app';
-import { 
-    getAuth, 
-    onAuthStateChanged,
-    createUserWithEmailAndPassword,
-    signInWithEmailAndPassword,
-    signOut
-} from 'firebase/auth';
-import { 
-    getFirestore, 
-    collection, 
-    doc, 
-    addDoc, 
-    setDoc, 
-    deleteDoc, 
-    onSnapshot,
-    writeBatch,
-    query,
-    getDocs,
-    runTransaction,
-    Timestamp,
-    where,
-    orderBy
-} from 'firebase/firestore';
-import { Search, Plus, Trash2, Edit, X, Package, DollarSign, Archive, Users, Truck, ShoppingCart, LogOut, Sparkles, BarChart2, FileText, UserPlus, Handshake, Landmark, Layers, ArrowDown, ArrowUp } from 'lucide-react';
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tạp Hoá Pro - Quản lý Bán hàng</title>
+    
+    <!-- Tải Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Tải các thư viện React -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Tải Babel để dịch mã JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-// --- CẤU HÌNH FIREBASE DO BẠN CUNG CẤP ---
-const firebaseConfig = {
-    apiKey: "AIzaSyCO1QIB19JCuIvrVwTNvDSAHjb5U_41Wns",
-    authDomain: "qlbh-edfdf.firebaseapp.com",
-    projectId: "qlbh-edfdf",
-    storageBucket: "qlbh-edfdf.appspot.com",
-    messagingSenderId: "572671987642",
-    appId: "1:572671987642:web:2fbe298cbad41cf0d25783"
-};
+    <style>
+        /* Thêm một vài style nhỏ để đảm bảo font chữ đẹp và cuộn mượt mà */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
 
-// --- KHỞI TẠO FIREBASE ---
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = firebaseConfig.projectId;
+    <div id="root"></div>
 
-// --- CÁC COMPONENT GIAO DIỆN CHUNG ---
-const Modal = ({ children, onClose, title, size = 'md' }) => {
-    const sizeClass = {
-        md: 'max-w-md',
-        lg: 'max-w-lg',
-        xl: 'max-w-xl',
-    }[size];
-    return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4">
-        <div className={`bg-white rounded-lg shadow-2xl w-full ${sizeClass} max-h-[90vh] flex flex-col`}>
-            <div className="flex justify-between items-center p-4 border-b sticky top-0 bg-white">
-                <h3 className="text-xl font-bold text-gray-800">{title}</h3>
-                <button onClick={onClose} className="text-gray-500 hover:text-gray-800 p-1 rounded-full transition-colors">
-                    <X size={24} />
-                </button>
-            </div>
-            <div className="p-6 overflow-y-auto">
+    <!-- Tải Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
+        window.FirebaseApp = { initializeApp };
+
+        import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
+        window.FirebaseAuth = { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut };
+
+        import { getFirestore, collection, doc, addDoc, setDoc, deleteDoc, onSnapshot, writeBatch, query, getDocs, runTransaction, Timestamp, where, orderBy } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
+        window.FirebaseFirestore = { getFirestore, collection, doc, addDoc, setDoc, deleteDoc, onSnapshot, writeBatch, query, getDocs, runTransaction, Timestamp, where, orderBy };
+    </script>
+
+    <!-- Mã nguồn React của ứng dụng -->
+    <script type="text/babel" data-type="module">
+        const { useState, useEffect, useCallback, useMemo, forwardRef } = React;
+
+        // --- CÁC BIỂU TƯỢNG (ICONS) DẠNG SVG ---
+        const Icon = ({ size = 24, className = '', children }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
                 {children}
-            </div>
-        </div>
-    </div>
-)};
+            </svg>
+        );
+        const SearchIcon = (props) => <Icon {...props}><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></Icon>;
+        const PlusIcon = (props) => <Icon {...props}><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></Icon>;
+        const Trash2Icon = (props) => <Icon {...props}><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></Icon>;
+        const EditIcon = (props) => <Icon {...props}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></Icon>;
+        const XIcon = (props) => <Icon {...props}><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></Icon>;
+        const PackageIcon = (props) => <Icon {...props}><path d="M16.5 9.4l-9-5.19"></path><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></Icon>;
+        const DollarSignIcon = (props) => <Icon {...props}><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></Icon>;
+        const ArchiveIcon = (props) => <Icon {...props}><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2H10a2 2 0 0 0-2 2v16"></path></Icon>;
+        const TruckIcon = (props) => <Icon {...props}><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></Icon>;
+        const ShoppingCartIcon = (props) => <Icon {...props}><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></Icon>;
+        const LogOutIcon = (props) => <Icon {...props}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></Icon>;
+        const BarChart2Icon = (props) => <Icon {...props}><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></Icon>;
+        const FileTextIcon = (props) => <Icon {...props}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></Icon>;
+        const UserPlusIcon = (props) => <Icon {...props}><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="17" y1="11" x2="23" y2="11"></line></Icon>;
+        const HandshakeIcon = (props) => <Icon {...props}><path d="M14.5 16.5a2.5 2.5 0 0 0-3.5-3.5l-1.5 1.5a2.5 2.5 0 0 0 3.5 3.5l1.5-1.5z"></path><path d="M9.5 11.5a2.5 2.5 0 0 1 3.5-3.5l1.5 1.5a2.5 2.5 0 0 1-3.5 3.5l-1.5-1.5z"></path><path d="M18 10c-2-1-2-4-4-4h-1"></path><path d="M6 14c2 1 2 4 4 4h1"></path><path d="M2 22l4-4"></path><path d="M22 2l-4 4"></path></Icon>;
+        const LandmarkIcon = (props) => <Icon {...props}><line x1="3" y1="22" x2="21" y2="22"></line><line x1="6" y1="18" x2="6" y2="11"></line><line x1="10" y1="18" x2="10" y2="11"></line><line x1="14" y1="18" x2="14" y2="11"></line><line x1="18" y1="18" x2="18" y2="11"></line><polygon points="12 2 20 7 4 7"></polygon></Icon>;
+        const LayersIcon = (props) => <Icon {...props}><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></Icon>;
+        const ArrowDownIcon = (props) => <Icon {...props}><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></Icon>;
+        const ArrowUpIcon = (props) => <Icon {...props}><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></Icon>;
 
-const PrimaryButton = ({ children, onClick, className = '', ...props }) => (
-    <button
-        onClick={onClick}
-        className={`flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 transition-all disabled:bg-gray-400 disabled:cursor-not-allowed ${className}`}
-        {...props}
-    >
-        {children}
-    </button>
-);
+        // --- Lấy các hàm từ Firebase đã được tải vào window ---
+        const { initializeApp } = window.FirebaseApp;
+        const { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } = window.FirebaseAuth;
+        const { getFirestore, collection, doc, addDoc, setDoc, deleteDoc, onSnapshot, writeBatch, query, getDocs, runTransaction, Timestamp, where, orderBy } = window.FirebaseFirestore;
 
-const Input = React.forwardRef(({ label, id, ...props }, ref) => (
-    <div>
-        <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-        <input ref={ref} id={id} className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" {...props} />
-    </div>
-));
-
-// --- COMPONENT XÁC THỰC ---
-const AuthScreen = () => {
-    const [isLogin, setIsLogin] = useState(true);
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
-    const [loading, setLoading] = useState(false);
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setError('');
-        setLoading(true);
-        try {
-            if (isLogin) {
-                await signInWithEmailAndPassword(auth, email, password);
-            } else {
-                await createUserWithEmailAndPassword(auth, email, password);
-            }
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    return (
-        <div className="min-h-screen bg-gray-100 flex flex-col justify-center items-center p-4">
-            <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
-                <h1 className="text-3xl font-bold text-blue-700 text-center mb-2">Tạp Hoá Pro</h1>
-                <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">{isLogin ? 'Đăng nhập' : 'Đăng ký'}</h2>
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    <Input id="email" label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-                    <Input id="password" label="Mật khẩu" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
-                    {error && <p className="text-red-500 text-sm">{error}</p>}
-                    <PrimaryButton type="submit" className="w-full" disabled={loading}>
-                        {loading ? 'Đang xử lý...' : (isLogin ? 'Đăng nhập' : 'Đăng ký')}
-                    </PrimaryButton>
-                </form>
-                <p className="text-center text-sm text-gray-600 mt-6">
-                    {isLogin ? "Chưa có tài khoản?" : "Đã có tài khoản?"}
-                    <button onClick={() => setIsLogin(!isLogin)} className="font-semibold text-blue-600 hover:underline ml-1">
-                        {isLogin ? 'Đăng ký ngay' : 'Đăng nhập'}
-                    </button>
-                </p>
-            </div>
-        </div>
-    );
-};
-
-// --- CÁC COMPONENT CHỨC NĂNG ---
-
-const EntityManager = ({ entityName, entityLabel, fields, db, userId }) => {
-    const [items, setItems] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [showModal, setShowModal] = useState(false);
-    const [editingItem, setEditingItem] = useState(null);
-    const collectionRef = useMemo(() => collection(db, 'artifacts', appId, 'users', userId, entityName), [db, userId, entityName]);
-
-    useEffect(() => {
-        const unsubscribe = onSnapshot(collectionRef, snapshot => {
-            setItems(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-            setIsLoading(false);
-        });
-        return unsubscribe;
-    }, [collectionRef]);
-
-    const handleSave = async (e) => {
-        e.preventDefault();
-        const formData = new FormData(e.target);
-        const itemData = {};
-        fields.forEach(field => { itemData[field.name] = formData.get(field.name); });
-        if (editingItem) { await setDoc(doc(collectionRef, editingItem.id), itemData); }
-        else { await addDoc(collectionRef, itemData); }
-        setShowModal(false); setEditingItem(null);
-    };
-
-    const handleDelete = async (id) => {
-        if (confirm(`Bạn có chắc muốn xóa ${entityLabel.toLowerCase()} này?`)) {
-            await deleteDoc(doc(collectionRef, id));
-        }
-    };
-
-    return (
-        <div className="p-6 bg-gray-50 min-h-screen">
-            <div className="flex justify-between items-center mb-6">
-                <h2 className="text-3xl font-bold text-gray-800">Quản lý {entityLabel}</h2>
-                <PrimaryButton onClick={() => { setEditingItem(null); setShowModal(true); }}>
-                    <Plus size={20} /> Thêm {entityLabel}
-                </PrimaryButton>
-            </div>
-            {isLoading ? <p>Đang tải...</p> : (
-                <div className="bg-white shadow-md rounded-lg overflow-x-auto">
-                    <table className="w-full min-w-max">
-                        <thead className="bg-gray-100">
-                            <tr>
-                                {fields.map(f => <th key={f.name} className="p-4 text-left text-sm font-semibold text-gray-600">{f.label}</th>)}
-                                <th className="p-4 text-left text-sm font-semibold text-gray-600">Hành động</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {items.map(item => (
-                                <tr key={item.id} className="border-b hover:bg-gray-50">
-                                    {fields.map(f => <td key={f.name} className="p-4 text-gray-700">{item[f.name]}</td>)}
-                                    <td className="p-4 flex gap-2">
-                                        <button onClick={() => { setEditingItem(item); setShowModal(true); }} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full"><Edit size={18} /></button>
-                                        <button onClick={() => handleDelete(item.id)} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><Trash2 size={18} /></button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
-            {showModal && (
-                <Modal title={`${editingItem ? 'Sửa' : 'Thêm'} ${entityLabel}`} onClose={() => setShowModal(false)}>
-                    <form onSubmit={handleSave} className="space-y-4">
-                        {fields.map(f => <Input key={f.name} name={f.name} label={f.label} defaultValue={editingItem?.[f.name] || ''} type={f.type || 'text'} required />)}
-                        <div className="flex justify-end pt-4"><PrimaryButton type="submit">Lưu</PrimaryButton></div>
-                    </form>
-                </Modal>
-            )}
-        </div>
-    );
-};
-
-const SupplierManagement = ({ db, userId }) => (<EntityManager entityName="suppliers" entityLabel="Nhà cung cấp" fields={[{ name: 'name', label: 'Tên nhà cung cấp' }, { name: 'phone', label: 'Số điện thoại', type: 'tel' }, { name: 'address', label: 'Địa chỉ' }]} db={db} userId={userId} />);
-const CustomerManagement = ({ db, userId }) => (<EntityManager entityName="customers" entityLabel="Khách hàng" fields={[{ name: 'name', label: 'Tên khách hàng' }, { name: 'phone', label: 'Số điện thoại', type: 'tel' }, { name: 'address', label: 'Địa chỉ' }]} db={db} userId={userId} />);
-
-const ProductManagement = ({ db, userId }) => {
-    const [products, setProducts] = useState([]);
-    const [inventoryLots, setInventoryLots] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [showModal, setShowModal] = useState(false);
-    const [showLotsModal, setShowLotsModal] = useState(false);
-    const [editingProduct, setEditingProduct] = useState(null);
-    const [viewingLotsFor, setViewingLotsFor] = useState(null);
-    
-    const productsCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/products`), [userId]);
-    const lotsCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/inventory_lots`), [userId]);
-
-    useEffect(() => {
-        const unsubProducts = onSnapshot(productsCollectionRef, snapshot => {
-            setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-            setIsLoading(false);
-        });
-        const unsubLots = onSnapshot(lotsCollectionRef, snapshot => {
-            setInventoryLots(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        });
-        return () => { unsubProducts(); unsubLots(); };
-    }, [productsCollectionRef, lotsCollectionRef]);
-
-    const productsWithStock = useMemo(() => {
-        return products.map(p => {
-            const totalStock = inventoryLots
-                .filter(lot => lot.productId === p.id)
-                .reduce((sum, lot) => sum + lot.currentQuantity, 0);
-            return { ...p, stock: totalStock };
-        });
-    }, [products, inventoryLots]);
-
-    const handleSaveProduct = async (e) => {
-        e.preventDefault();
-        const formData = new FormData(e.target);
-        const productData = {
-            name: formData.get('name'),
-            barcode: formData.get('barcode'),
-            category: formData.get('category'),
-            unit: formData.get('unit'),
-            salePrice: Number(formData.get('salePrice')),
+        // --- CẤU HÌNH FIREBASE DO BẠN CUNG CẤP ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyCO1QIB19JCuIvrVwTNvDSAHjb5U_41Wns",
+            authDomain: "qlbh-edfdf.firebaseapp.com",
+            projectId: "qlbh-edfdf",
+            storageBucket: "qlbh-edfdf.appspot.com",
+            messagingSenderId: "572671987642",
+            appId: "1:572671987642:web:2fbe298cbad41cf0d25783"
         };
-        if (editingProduct) {
-            await setDoc(doc(productsCollectionRef, editingProduct.id), productData);
-        } else {
-            await addDoc(productsCollectionRef, productData);
-        }
-        setShowModal(false);
-        setEditingProduct(null);
-    };
 
-    const handleDeleteProduct = async (id) => {
-        if (confirm('Bạn có chắc chắn muốn xóa sản phẩm này? Thao tác này không thể hoàn tác.')) {
-            const productLots = inventoryLots.filter(lot => lot.productId === id);
-            if (productLots.length > 0) {
-                alert("Không thể xóa sản phẩm vì vẫn còn lô hàng tồn kho. Vui lòng xử lý hết hàng tồn kho trước.");
-                return;
-            }
-            await deleteDoc(doc(productsCollectionRef, id));
-        }
-    };
-    
-    const handleViewLots = (product) => {
-        setViewingLotsFor(product);
-        setShowLotsModal(true);
-    };
+        // --- KHỞI TẠO FIREBASE ---
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = firebaseConfig.projectId;
 
-    const lotsForSelectedProduct = viewingLotsFor ? inventoryLots.filter(lot => lot.productId === viewingLotsFor.id && lot.currentQuantity > 0) : [];
-
-    return (
-        <div className="p-6 bg-gray-50 min-h-screen">
-             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-3xl font-bold text-gray-800">Quản lý Sản phẩm</h2>
-                <PrimaryButton onClick={() => { setEditingProduct(null); setShowModal(true); }}><Plus size={20} /> Thêm Sản phẩm</PrimaryButton>
-            </div>
-            {isLoading ? <p>Đang tải...</p> : (
-                 <div className="bg-white shadow-md rounded-lg overflow-x-auto">
-                    <table className="w-full min-w-max">
-                        <thead className="bg-gray-100">
-                            <tr>{['Tên sản phẩm', 'Danh mục', 'Giá bán', 'Tổng tồn kho', 'Hành động'].map(h => <th key={h} className="p-4 text-left text-sm font-semibold text-gray-600">{h}</th>)}</tr>
-                        </thead>
-                        <tbody>
-                            {productsWithStock.map(product => (
-                                <tr key={product.id} className="border-b hover:bg-gray-50">
-                                    <td className="p-4 font-medium text-gray-800">{product.name}</td>
-                                    <td className="p-4 text-gray-600">{product.category}</td>
-                                    <td className="p-4 text-gray-600">{product.salePrice.toLocaleString('vi-VN')}đ</td>
-                                    <td className={`p-4 font-semibold ${product.stock <= 10 ? 'text-red-500' : 'text-green-600'}`}>{product.stock}</td>
-                                    <td className="p-4 flex gap-2">
-                                        <button onClick={() => handleViewLots(product)} className="p-2 text-green-600 hover:bg-green-100 rounded-full" title="Xem các lô hàng"><Layers size={18} /></button>
-                                        <button onClick={() => { setEditingProduct(product); setShowModal(true); }} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full" title="Sửa thông tin chung"><Edit size={18} /></button>
-                                        <button onClick={() => handleDeleteProduct(product.id)} className="p-2 text-red-600 hover:bg-red-100 rounded-full" title="Xóa sản phẩm"><Trash2 size={18} /></button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
-            {showModal && (
-                <Modal title={editingProduct ? 'Sửa Sản phẩm' : 'Thêm Sản phẩm mới'} onClose={() => setShowModal(false)}>
-                    <form onSubmit={handleSaveProduct} className="space-y-4">
-                        <Input name="name" label="Tên sản phẩm" defaultValue={editingProduct?.name} required />
-                        <Input name="barcode" label="Mã vạch (tùy chọn)" defaultValue={editingProduct?.barcode} />
-                        <Input name="category" label="Danh mục" defaultValue={editingProduct?.category} placeholder="VD: Đồ uống" required />
-                        <Input name="unit" label="Đơn vị tính" defaultValue={editingProduct?.unit} placeholder="VD: lon, chai, gói" required />
-                        <Input name="salePrice" label="Giá bán đề xuất" type="number" defaultValue={editingProduct?.salePrice} required />
-                        <div className="flex justify-end pt-4"><PrimaryButton type="submit">Lưu lại</PrimaryButton></div>
-                    </form>
-                </Modal>
-            )}
-            {showLotsModal && viewingLotsFor && (
-                <Modal title={`Các lô hàng của: ${viewingLotsFor.name}`} onClose={() => setShowLotsModal(false)} size="lg">
-                    <div className="space-y-3">
-                        {lotsForSelectedProduct.length > 0 ? lotsForSelectedProduct.map(lot => (
-                            <div key={lot.id} className="bg-gray-100 p-3 rounded-lg flex justify-between">
-                                <div>
-                                    <p>NCC: <span className="font-semibold">{lot.supplierName}</span></p>
-                                    <p className="text-sm">Ngày nhập: {lot.createdAt.toDate().toLocaleDateString('vi-VN')}</p>
-                                </div>
-                                <div>
-                                    <p>Giá nhập: <span className="font-semibold">{lot.importPrice.toLocaleString('vi-VN')}đ</span></p>
-                                    <p>Còn lại: <span className="font-semibold">{lot.currentQuantity}</span> / {lot.initialQuantity}</p>
-                                </div>
-                            </div>
-                        )) : <p>Không có lô hàng nào còn tồn kho.</p>}
-                    </div>
-                </Modal>
-            )}
-        </div>
-    );
-};
-
-const InventoryImport = ({ db, userId }) => {
-    const [masterProducts, setMasterProducts] = useState([]);
-    const [suppliers, setSuppliers] = useState([]);
-    const [importList, setImportList] = useState([]);
-    const [selectedProductId, setSelectedProductId] = useState('');
-    const [selectedSupplierId, setSelectedSupplierId] = useState('');
-    const [quantity, setQuantity] = useState(1);
-    const [importPrice, setImportPrice] = useState(0);
-    const [isProcessing, setIsProcessing] = useState(false);
-    
-    const productsCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/products`), [userId]);
-    const suppliersCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/suppliers`), [userId]);
-    const lotsCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/inventory_lots`), [userId]);
-
-    useEffect(() => {
-        const unsubProducts = onSnapshot(productsCollectionRef, (snapshot) => setMasterProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
-        const unsubSuppliers = onSnapshot(suppliersCollectionRef, (snapshot) => setSuppliers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
-        return () => { unsubProducts(); unsubSuppliers(); };
-    }, [productsCollectionRef, suppliersCollectionRef]);
-    
-    const addToImportList = () => {
-        if (!selectedProductId || quantity <= 0 || importPrice <= 0) {
-            alert("Vui lòng điền đủ thông tin sản phẩm, số lượng và giá nhập.");
-            return;
-        }
-        const product = masterProducts.find(p => p.id === selectedProductId);
-        if (!product) return;
+        // --- TOÀN BỘ MÃ NGUỒN REACT CỦA ỨNG DỤNG ---
         
-        const newItem = {
-            productId: product.id,
-            productName: product.name,
-            quantity,
-            importPrice
-        };
-        setImportList([...importList, newItem]);
-        setSelectedProductId('');
-        setQuantity(1);
-        setImportPrice(0);
-    };
-
-    const handleImport = async () => {
-        if (importList.length === 0 || isProcessing || !selectedSupplierId) {
-            alert("Vui lòng chọn nhà cung cấp và thêm ít nhất một sản phẩm vào phiếu.");
-            return;
-        }
-        setIsProcessing(true);
-        const batch = writeBatch(db);
-        const selectedSupplier = suppliers.find(s => s.id === selectedSupplierId);
-        
-        importList.forEach(item => {
-            const lotRef = doc(lotsCollectionRef);
-            batch.set(lotRef, {
-                productId: item.productId,
-                productName: item.productName,
-                supplierId: selectedSupplierId,
-                supplierName: selectedSupplier.name,
-                importPrice: item.importPrice,
-                initialQuantity: item.quantity,
-                currentQuantity: item.quantity,
-                createdAt: Timestamp.now()
-            });
-        });
-
-        try {
-            await batch.commit();
-            alert("Nhập hàng thành công!");
-            setImportList([]);
-            setSelectedSupplierId('');
-        } catch (error) {
-            console.error("Lỗi khi nhập hàng: ", error);
-            alert("Đã xảy ra lỗi khi nhập hàng.");
-        } finally {
-            setIsProcessing(false);
-        }
-    };
-
-    const totalValue = importList.reduce((sum, item) => sum + (item.importPrice * item.quantity), 0);
-
-    return (
-        <div className="p-6 bg-gray-50 min-h-screen">
-            <h2 className="text-3xl font-bold text-gray-800 mb-6">Tạo Phiếu Nhập Hàng</h2>
-            <div className="mb-6">
-                <label htmlFor="supplier-select-import" className="block text-lg font-medium text-gray-700 mb-2">Chọn Nhà Cung Cấp</label>
-                <select id="supplier-select-import" value={selectedSupplierId} onChange={e => setSelectedSupplierId(e.target.value)} className="w-full md:w-1/2 px-4 py-3 border border-gray-300 rounded-lg shadow-sm text-lg">
-                    <option value="">-- Bắt buộc chọn nhà cung cấp --</option>
-                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="md:col-span-1 bg-white p-6 rounded-lg shadow-md">
-                    <h3 className="text-xl font-semibold mb-4">Thêm sản phẩm vào phiếu</h3>
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Chọn sản phẩm</label>
-                            <select value={selectedProductId} onChange={e => setSelectedProductId(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                                <option value="">-- Chọn --</option>
-                                {masterProducts.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                            </select>
-                        </div>
-                        <Input label="Giá nhập" type="number" value={importPrice} onChange={e => setImportPrice(Number(e.target.value))} min="0" />
-                        <Input label="Số lượng" type="number" value={quantity} onChange={e => setQuantity(Number(e.target.value))} min="1" />
-                        <PrimaryButton onClick={addToImportList} className="w-full"><Plus size={20}/> Thêm vào phiếu</PrimaryButton>
+        const Modal = ({ children, onClose, title, size = 'md' }) => {
+            const sizeClass = {
+                md: 'max-w-md',
+                lg: 'max-w-lg',
+                xl: 'max-w-xl',
+            }[size];
+            return (
+            <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4">
+                <div className={`bg-white rounded-lg shadow-2xl w-full ${sizeClass} max-h-[90vh] flex flex-col`}>
+                    <div className="flex justify-between items-center p-4 border-b sticky top-0 bg-white">
+                        <h3 className="text-xl font-bold text-gray-800">{title}</h3>
+                        <button onClick={onClose} className="text-gray-500 hover:text-gray-800 p-1 rounded-full transition-colors">
+                            <XIcon size={24} />
+                        </button>
                     </div>
-                </div>
-                <div className="md:col-span-2 bg-white p-6 rounded-lg shadow-md">
-                    <h3 className="text-xl font-semibold mb-4">Chi tiết phiếu nhập</h3>
-                    <div className="overflow-x-auto">
-                        <table className="w-full">
-                            <thead><tr className="border-b"><th className="p-2 text-left">Sản phẩm</th><th className="p-2 text-center">Số lượng</th><th className="p-2 text-right">Đơn giá</th><th className="p-2 text-right">Thành tiền</th></tr></thead>
-                            <tbody>
-                                {importList.map((item, index) => (
-                                    <tr key={index} className="border-b"><td className="p-2">{item.productName}</td><td className="p-2 text-center">{item.quantity}</td><td className="p-2 text-right">{item.importPrice.toLocaleString('vi-VN')}đ</td><td className="p-2 text-right">{(item.importPrice * item.quantity).toLocaleString('vi-VN')}đ</td></tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                    <div className="mt-6 text-right">
-                        <p className="text-2xl font-bold">Tổng cộng: {totalValue.toLocaleString('vi-VN')}đ</p>
-                        <PrimaryButton onClick={handleImport} className="mt-4" disabled={importList.length === 0 || isProcessing || !selectedSupplierId}>
-                            {isProcessing ? 'Đang xử lý...' : 'Hoàn tất Nhập hàng'}
-                        </PrimaryButton>
+                    <div className="p-6 overflow-y-auto">
+                        {children}
                     </div>
                 </div>
             </div>
-        </div>
-    );
-};
+        )};
 
-// Giao diện bán hàng (POS) - ĐÃ SỬA LỖI CUỐI CÙNG
-const PointOfSale = ({ db, userId }) => {
-    const [products, setProducts] = useState([]);
-    const [inventoryLots, setInventoryLots] = useState([]);
-    const [customers, setCustomers] = useState([]);
-    const [cart, setCart] = useState([]);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [showDebtModal, setShowDebtModal] = useState(false);
-    const [selectedCustomerId, setSelectedCustomerId] = useState('');
-    const [isProcessing, setIsProcessing] = useState(false);
+        const PrimaryButton = ({ children, onClick, className = '', ...props }) => (
+            <button
+                onClick={onClick}
+                className={`flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 transition-all disabled:bg-gray-400 disabled:cursor-not-allowed ${className}`}
+                {...props}
+            >
+                {children}
+            </button>
+        );
 
-    const customersCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/customers`), [userId]);
-    const productsCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/products`), [userId]);
-    const lotsCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/inventory_lots`), [userId]);
+        const Input = forwardRef(({ label, id, ...props }, ref) => (
+            <div>
+                <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+                <input ref={ref} id={id} className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" {...props} />
+            </div>
+        ));
 
-    useEffect(() => {
-        const unsubProducts = onSnapshot(productsCollectionRef, snapshot => setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
-        const unsubCustomers = onSnapshot(customersCollectionRef, snapshot => setCustomers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
-        const unsubLots = onSnapshot(lotsCollectionRef, snapshot => setInventoryLots(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
-        return () => { unsubProducts(); unsubCustomers(); unsubLots(); };
-    }, [productsCollectionRef, customersCollectionRef, lotsCollectionRef]);
+        const AuthScreen = () => {
+            const [isLogin, setIsLogin] = useState(true);
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [error, setError] = useState('');
+            const [loading, setLoading] = useState(false);
 
-    const productsWithStock = useMemo(() => {
-        return products.map(p => {
-            const totalStock = inventoryLots
-                .filter(lot => lot.productId === p.id)
-                .reduce((sum, lot) => sum + lot.currentQuantity, 0);
-            return { ...p, stock: totalStock };
-        });
-    }, [products, inventoryLots]);
-
-    const addToCart = (product) => {
-        if (product.stock <= 0) { alert(`Sản phẩm "${product.name}" đã hết hàng.`); return; }
-        const existingItem = cart.find(item => item.id === product.id);
-        if (existingItem) {
-            if (existingItem.quantity >= product.stock) { alert(`Số lượng mua vượt quá tồn kho (${product.stock}).`); return; }
-            setCart(cart.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item));
-        } else {
-            setCart([...cart, { ...product, quantity: 1 }]);
-        }
-    };
-
-    const updateQuantity = (productId, newQuantity) => {
-        const product = productsWithStock.find(p => p.id === productId);
-        if (newQuantity <= 0) { setCart(cart.filter(item => item.id !== productId)); }
-        else if (newQuantity > product.stock) {
-            alert(`Số lượng mua vượt quá tồn kho (${product.stock}).`);
-            setCart(cart.map(item => item.id === productId ? { ...item, quantity: product.stock } : item));
-        } else {
-            setCart(cart.map(item => item.id === productId ? { ...item, quantity: newQuantity } : item));
-        }
-    };
-    
-    const handleCheckout = async (paymentMethod = 'cash', customerId = null) => {
-        if (cart.length === 0 || isProcessing) return;
-        if (paymentMethod === 'credit' && !customerId) {
-            alert("Vui lòng chọn khách hàng để ghi nợ."); return;
-        }
-        setIsProcessing(true);
-
-        try {
-            // Bước 1: Lập kế hoạch hành động (Đọc bên ngoài giao dịch)
-            const actionPlan = {
-                updates: [], // { lotId, newQuantity }
-                totalCost: 0,
-                totalAmount: cart.reduce((sum, item) => sum + item.salePrice * item.quantity, 0),
-                saleItems: []
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setError('');
+                setLoading(true);
+                try {
+                    if (isLogin) {
+                        await signInWithEmailAndPassword(auth, email, password);
+                    } else {
+                        await createUserWithEmailAndPassword(auth, email, password);
+                    }
+                } catch (err) {
+                    setError(err.message);
+                } finally {
+                    setLoading(false);
+                }
             };
 
-            for (const cartItem of cart) {
-                let quantityToSell = cartItem.quantity;
-                const productLotsQuery = query(
-                    lotsCollectionRef,
-                    where("productId", "==", cartItem.id),
-                    where("currentQuantity", ">", 0),
-                    orderBy("createdAt", "asc")
-                );
-                const lotSnapshots = await getDocs(productLotsQuery);
-
-                const currentTotalStock = lotSnapshots.docs.reduce((sum, doc) => sum + doc.data().currentQuantity, 0);
-                if (currentTotalStock < quantityToSell) {
-                    throw new Error(`Không đủ hàng cho "${cartItem.name}". Chỉ còn ${currentTotalStock} trong kho.`);
-                }
-
-                for (const lotDoc of lotSnapshots.docs) {
-                    if (quantityToSell <= 0) break;
-                    const lotData = lotDoc.data();
-                    const sellFromThisLot = Math.min(quantityToSell, lotData.currentQuantity);
-                    
-                    actionPlan.totalCost += sellFromThisLot * lotData.importPrice;
-                    actionPlan.updates.push({ 
-                        lotId: lotDoc.id, 
-                        newQuantity: lotData.currentQuantity - sellFromThisLot 
-                    });
-                    
-                    quantityToSell -= sellFromThisLot;
-                }
-                actionPlan.saleItems.push({
-                    productId: cartItem.id, name: cartItem.name, quantity: cartItem.quantity,
-                    salePrice: cartItem.salePrice,
-                });
-            }
-
-            // Bước 2: Thực thi kế hoạch trong giao dịch an toàn
-            await runTransaction(db, async (transaction) => {
-                // Kiểm tra lại lần cuối và thực thi
-                for (const update of actionPlan.updates) {
-                    const lotRef = doc(lotsCollectionRef, update.lotId);
-                    // Không cần đọc lại vì logic đã được xác thực bên ngoài
-                    transaction.update(lotRef, { currentQuantity: update.newQuantity });
-                }
-
-                // Xử lý công nợ
-                if (paymentMethod === 'credit' && customerId) {
-                    const customerRef = doc(customersCollectionRef, customerId);
-                    const customerDoc = await transaction.get(customerRef); // Đọc bên trong transaction là bắt buộc
-                    if (!customerDoc.exists()) throw new Error("Khách hàng không tồn tại.");
-                    const currentDebt = customerDoc.data().debt || 0;
-                    transaction.update(customerRef, { debt: currentDebt + actionPlan.totalAmount });
-                }
-
-                // Tạo hóa đơn
-                const salesRef = doc(collection(db, `artifacts/${appId}/users/${userId}/salesTransactions`));
-                const customerName = customerId ? customers.find(c => c.id === customerId)?.name : null;
-                transaction.set(salesRef, {
-                    createdAt: Timestamp.now(), items: actionPlan.saleItems, 
-                    totalAmount: actionPlan.totalAmount, totalCost: actionPlan.totalCost,
-                    paymentMethod, customerId, customerName
-                });
-            });
-
-            alert("Giao dịch thành công!");
-            setCart([]);
-            setShowDebtModal(false);
-            setSelectedCustomerId('');
-
-        } catch (error) {
-            console.error("Lỗi giao dịch:", error);
-            alert(`Giao dịch thất bại: ${error.message}`);
-        } finally {
-            setIsProcessing(false);
-        }
-    };
-
-    const filteredProducts = searchTerm ? productsWithStock.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())) : productsWithStock;
-    const totalAmount = cart.reduce((sum, item) => sum + (item.salePrice * item.quantity), 0);
-
-    return (
-        <div className="p-6 bg-gray-50 min-h-screen grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2">
-                <h2 className="text-3xl font-bold text-gray-800 mb-4">Bán Hàng</h2>
-                <div className="mb-4 relative">
-                    <Input id="search-pos" type="text" placeholder="Tìm tên sản phẩm..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10"/>
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+            return (
+                <div className="min-h-screen bg-gray-100 flex flex-col justify-center items-center p-4">
+                    <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
+                        <h1 className="text-3xl font-bold text-blue-700 text-center mb-2">Tạp Hoá Pro</h1>
+                        <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">{isLogin ? 'Đăng nhập' : 'Đăng ký'}</h2>
+                        <form onSubmit={handleSubmit} className="space-y-6">
+                            <Input id="email" label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+                            <Input id="password" label="Mật khẩu" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+                            {error && <p className="text-red-500 text-sm">{error}</p>}
+                            <PrimaryButton type="submit" className="w-full" disabled={loading}>
+                                {loading ? 'Đang xử lý...' : (isLogin ? 'Đăng nhập' : 'Đăng ký')}
+                            </PrimaryButton>
+                        </form>
+                        <p className="text-center text-sm text-gray-600 mt-6">
+                            {isLogin ? "Chưa có tài khoản?" : "Đã có tài khoản?"}
+                            <button onClick={() => setIsLogin(!isLogin)} className="font-semibold text-blue-600 hover:underline ml-1">
+                                {isLogin ? 'Đăng ký ngay' : 'Đăng nhập'}
+                            </button>
+                        </p>
+                    </div>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-[75vh] overflow-y-auto p-2">
-                    {filteredProducts.map(product => (
-                        <div key={product.id} onClick={() => addToCart(product)} className="bg-white p-4 rounded-lg shadow-md hover:shadow-lg hover:border-blue-500 border-2 border-transparent cursor-pointer transition-all text-center flex flex-col justify-between">
-                            <p className="font-semibold text-gray-800 truncate">{product.name}</p>
-                            <div>
-                                <p className="text-blue-600 font-bold">{product.salePrice.toLocaleString('vi-VN')}đ</p>
-                                <p className={`text-sm ${product.stock > 0 ? 'text-gray-500' : 'text-red-500 font-bold'}`}>{product.stock > 0 ? `Kho: ${product.stock}` : 'Hết hàng'}</p>
+            );
+        };
+
+        const EntityManager = ({ entityName, entityLabel, fields, db, userId }) => {
+            const [items, setItems] = useState([]);
+            const [isLoading, setIsLoading] = useState(true);
+            const [showModal, setShowModal] = useState(false);
+            const [editingItem, setEditingItem] = useState(null);
+            const collectionRef = useMemo(() => collection(db, 'artifacts', appId, 'users', userId, entityName), [db, userId, entityName]);
+
+            useEffect(() => {
+                const unsubscribe = onSnapshot(collectionRef, snapshot => {
+                    setItems(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                    setIsLoading(false);
+                });
+                return unsubscribe;
+            }, [collectionRef]);
+
+            const handleSave = async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const itemData = {};
+                fields.forEach(field => { itemData[field.name] = formData.get(field.name); });
+                if (editingItem) { await setDoc(doc(collectionRef, editingItem.id), itemData); }
+                else { await addDoc(collectionRef, itemData); }
+                setShowModal(false); setEditingItem(null);
+            };
+
+            const handleDelete = async (id) => {
+                if (window.confirm(`Bạn có chắc muốn xóa ${entityLabel.toLowerCase()} này?`)) {
+                    await deleteDoc(doc(collectionRef, id));
+                }
+            };
+
+            return (
+                <div className="p-6 bg-gray-50 min-h-screen">
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-3xl font-bold text-gray-800">Quản lý {entityLabel}</h2>
+                        <PrimaryButton onClick={() => { setEditingItem(null); setShowModal(true); }}>
+                            <PlusIcon size={20} /> Thêm {entityLabel}
+                        </PrimaryButton>
+                    </div>
+                    {isLoading ? <p>Đang tải...</p> : (
+                        <div className="bg-white shadow-md rounded-lg overflow-x-auto">
+                            <table className="w-full min-w-max">
+                                <thead className="bg-gray-100">
+                                    <tr>
+                                        {fields.map(f => <th key={f.name} className="p-4 text-left text-sm font-semibold text-gray-600">{f.label}</th>)}
+                                        <th className="p-4 text-left text-sm font-semibold text-gray-600">Hành động</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {items.map(item => (
+                                        <tr key={item.id} className="border-b hover:bg-gray-50">
+                                            {fields.map(f => <td key={f.name} className="p-4 text-gray-700">{item[f.name]}</td>)}
+                                            <td className="p-4 flex gap-2">
+                                                <button onClick={() => { setEditingItem(item); setShowModal(true); }} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full"><EditIcon size={18} /></button>
+                                                <button onClick={() => handleDelete(item.id)} className="p-2 text-red-600 hover:bg-red-100 rounded-full"><Trash2Icon size={18} /></button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                    {showModal && (
+                        <Modal title={`${editingItem ? 'Sửa' : 'Thêm'} ${entityLabel}`} onClose={() => setShowModal(false)}>
+                            <form onSubmit={handleSave} className="space-y-4">
+                                {fields.map(f => <Input key={f.name} name={f.name} label={f.label} defaultValue={editingItem?.[f.name] || ''} type={f.type || 'text'} required />)}
+                                <div className="flex justify-end pt-4"><PrimaryButton type="submit">Lưu</PrimaryButton></div>
+                            </form>
+                        </Modal>
+                    )}
+                </div>
+            );
+        };
+
+        const SupplierManagement = ({ db, userId }) => (<EntityManager entityName="suppliers" entityLabel="Nhà cung cấp" fields={[{ name: 'name', label: 'Tên nhà cung cấp' }, { name: 'phone', label: 'Số điện thoại', type: 'tel' }, { name: 'address', label: 'Địa chỉ' }]} db={db} userId={userId} />);
+        const CustomerManagement = ({ db, userId }) => (<EntityManager entityName="customers" entityLabel="Khách hàng" fields={[{ name: 'name', label: 'Tên khách hàng' }, { name: 'phone', label: 'Số điện thoại', type: 'tel' }, { name: 'address', label: 'Địa chỉ' }]} db={db} userId={userId} />);
+
+        const ProductManagement = ({ db, userId }) => {
+            const [products, setProducts] = useState([]);
+            const [inventoryLots, setInventoryLots] = useState([]);
+            const [isLoading, setIsLoading] = useState(true);
+            const [showModal, setShowModal] = useState(false);
+            const [showLotsModal, setShowLotsModal] = useState(false);
+            const [editingProduct, setEditingProduct] = useState(null);
+            const [viewingLotsFor, setViewingLotsFor] = useState(null);
+            
+            const productsCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/products`), [userId]);
+            const lotsCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/inventory_lots`), [userId]);
+
+            useEffect(() => {
+                const unsubProducts = onSnapshot(productsCollectionRef, snapshot => {
+                    setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                    setIsLoading(false);
+                });
+                const unsubLots = onSnapshot(lotsCollectionRef, snapshot => {
+                    setInventoryLots(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                });
+                return () => { unsubProducts(); unsubLots(); };
+            }, [productsCollectionRef, lotsCollectionRef]);
+
+            const productsWithStock = useMemo(() => {
+                return products.map(p => {
+                    const totalStock = inventoryLots
+                        .filter(lot => lot.productId === p.id)
+                        .reduce((sum, lot) => sum + lot.currentQuantity, 0);
+                    return { ...p, stock: totalStock };
+                });
+            }, [products, inventoryLots]);
+
+            const handleSaveProduct = async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const productData = {
+                    name: formData.get('name'),
+                    barcode: formData.get('barcode'),
+                    category: formData.get('category'),
+                    unit: formData.get('unit'),
+                    salePrice: Number(formData.get('salePrice')),
+                };
+                if (editingProduct) {
+                    await setDoc(doc(productsCollectionRef, editingProduct.id), productData);
+                } else {
+                    await addDoc(productsCollectionRef, productData);
+                }
+                setShowModal(false);
+                setEditingProduct(null);
+            };
+
+            const handleDeleteProduct = async (id) => {
+                if (window.confirm('Bạn có chắc chắn muốn xóa sản phẩm này? Thao tác này không thể hoàn tác.')) {
+                    const productLots = inventoryLots.filter(lot => lot.productId === id && lot.currentQuantity > 0);
+                    if (productLots.length > 0) {
+                        alert("Không thể xóa sản phẩm vì vẫn còn lô hàng tồn kho. Vui lòng xử lý hết hàng tồn kho trước.");
+                        return;
+                    }
+                    await deleteDoc(doc(productsCollectionRef, id));
+                }
+            };
+            
+            const handleViewLots = (product) => {
+                setViewingLotsFor(product);
+                setShowLotsModal(true);
+            };
+
+            const lotsForSelectedProduct = viewingLotsFor ? inventoryLots.filter(lot => lot.productId === viewingLotsFor.id && lot.currentQuantity > 0) : [];
+
+            return (
+                <div className="p-6 bg-gray-50 min-h-screen">
+                     <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-3xl font-bold text-gray-800">Quản lý Sản phẩm</h2>
+                        <PrimaryButton onClick={() => { setEditingProduct(null); setShowModal(true); }}><PlusIcon size={20} /> Thêm Sản phẩm</PrimaryButton>
+                    </div>
+                    {isLoading ? <p>Đang tải...</p> : (
+                         <div className="bg-white shadow-md rounded-lg overflow-x-auto">
+                            <table className="w-full min-w-max">
+                                <thead className="bg-gray-100">
+                                    <tr>{['Tên sản phẩm', 'Danh mục', 'Giá bán', 'Tổng tồn kho', 'Hành động'].map(h => <th key={h} className="p-4 text-left text-sm font-semibold text-gray-600">{h}</th>)}</tr>
+                                </thead>
+                                <tbody>
+                                    {productsWithStock.map(product => (
+                                        <tr key={product.id} className="border-b hover:bg-gray-50">
+                                            <td className="p-4 font-medium text-gray-800">{product.name}</td>
+                                            <td className="p-4 text-gray-600">{product.category}</td>
+                                            <td className="p-4 text-gray-600">{product.salePrice.toLocaleString('vi-VN')}đ</td>
+                                            <td className={`p-4 font-semibold ${product.stock <= 10 ? 'text-red-500' : 'text-green-600'}`}>{product.stock}</td>
+                                            <td className="p-4 flex gap-2">
+                                                <button onClick={() => handleViewLots(product)} className="p-2 text-green-600 hover:bg-green-100 rounded-full" title="Xem các lô hàng"><LayersIcon size={18} /></button>
+                                                <button onClick={() => { setEditingProduct(product); setShowModal(true); }} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full" title="Sửa thông tin chung"><EditIcon size={18} /></button>
+                                                <button onClick={() => handleDeleteProduct(product.id)} className="p-2 text-red-600 hover:bg-red-100 rounded-full" title="Xóa sản phẩm"><Trash2Icon size={18} /></button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                    {showModal && (
+                        <Modal title={editingProduct ? 'Sửa Sản phẩm' : 'Thêm Sản phẩm mới'} onClose={() => setShowModal(false)}>
+                            <form onSubmit={handleSaveProduct} className="space-y-4">
+                                <Input name="name" label="Tên sản phẩm" defaultValue={editingProduct?.name} required />
+                                <Input name="barcode" label="Mã vạch (tùy chọn)" defaultValue={editingProduct?.barcode} />
+                                <Input name="category" label="Danh mục" defaultValue={editingProduct?.category} placeholder="VD: Đồ uống" required />
+                                <Input name="unit" label="Đơn vị tính" defaultValue={editingProduct?.unit} placeholder="VD: lon, chai, gói" required />
+                                <Input name="salePrice" label="Giá bán đề xuất" type="number" defaultValue={editingProduct?.salePrice} required />
+                                <div className="flex justify-end pt-4"><PrimaryButton type="submit">Lưu lại</PrimaryButton></div>
+                            </form>
+                        </Modal>
+                    )}
+                    {showLotsModal && viewingLotsFor && (
+                        <Modal title={`Các lô hàng của: ${viewingLotsFor.name}`} onClose={() => setShowLotsModal(false)} size="lg">
+                            <div className="space-y-3">
+                                {lotsForSelectedProduct.length > 0 ? lotsForSelectedProduct.map(lot => (
+                                    <div key={lot.id} className="bg-gray-100 p-3 rounded-lg flex justify-between">
+                                        <div>
+                                            <p>NCC: <span className="font-semibold">{lot.supplierName}</span></p>
+                                            <p className="text-sm">Ngày nhập: {lot.createdAt.toDate().toLocaleDateString('vi-VN')}</p>
+                                        </div>
+                                        <div>
+                                            <p>Giá nhập: <span className="font-semibold">{lot.importPrice.toLocaleString('vi-VN')}đ</span></p>
+                                            <p>Còn lại: <span className="font-semibold">{lot.currentQuantity}</span> / {lot.initialQuantity}</p>
+                                        </div>
+                                    </div>
+                                )) : <p>Không có lô hàng nào còn tồn kho.</p>}
+                            </div>
+                        </Modal>
+                    )}
+                </div>
+            );
+        };
+
+        const InventoryImport = ({ db, userId }) => {
+            const [masterProducts, setMasterProducts] = useState([]);
+            const [suppliers, setSuppliers] = useState([]);
+            const [importList, setImportList] = useState([]);
+            const [selectedProductId, setSelectedProductId] = useState('');
+            const [selectedSupplierId, setSelectedSupplierId] = useState('');
+            const [quantity, setQuantity] = useState(1);
+            const [importPrice, setImportPrice] = useState(0);
+            const [isProcessing, setIsProcessing] = useState(false);
+            
+            const productsCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/products`), [userId]);
+            const suppliersCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/suppliers`), [userId]);
+            const lotsCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/inventory_lots`), [userId]);
+
+            useEffect(() => {
+                const unsubProducts = onSnapshot(productsCollectionRef, (snapshot) => setMasterProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+                const unsubSuppliers = onSnapshot(suppliersCollectionRef, (snapshot) => setSuppliers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+                return () => { unsubProducts(); unsubSuppliers(); };
+            }, [productsCollectionRef, suppliersCollectionRef]);
+            
+            const addToImportList = () => {
+                if (!selectedProductId || quantity <= 0 || importPrice <= 0) {
+                    alert("Vui lòng điền đủ thông tin sản phẩm, số lượng và giá nhập.");
+                    return;
+                }
+                const product = masterProducts.find(p => p.id === selectedProductId);
+                if (!product) return;
+                
+                const newItem = {
+                    productId: product.id,
+                    productName: product.name,
+                    quantity,
+                    importPrice
+                };
+                setImportList([...importList, newItem]);
+                setSelectedProductId('');
+                setQuantity(1);
+                setImportPrice(0);
+            };
+
+            const handleImport = async () => {
+                if (importList.length === 0 || isProcessing || !selectedSupplierId) {
+                    alert("Vui lòng chọn nhà cung cấp và thêm ít nhất một sản phẩm vào phiếu.");
+                    return;
+                }
+                setIsProcessing(true);
+                const batch = writeBatch(db);
+                const selectedSupplier = suppliers.find(s => s.id === selectedSupplierId);
+                
+                importList.forEach(item => {
+                    const lotRef = doc(lotsCollectionRef);
+                    batch.set(lotRef, {
+                        productId: item.productId,
+                        productName: item.productName,
+                        supplierId: selectedSupplierId,
+                        supplierName: selectedSupplier.name,
+                        importPrice: item.importPrice,
+                        initialQuantity: item.quantity,
+                        currentQuantity: item.quantity,
+                        createdAt: Timestamp.now()
+                    });
+                });
+
+                try {
+                    await batch.commit();
+                    alert("Nhập hàng thành công!");
+                    setImportList([]);
+                    setSelectedSupplierId('');
+                } catch (error) {
+                    console.error("Lỗi khi nhập hàng: ", error);
+                    alert("Đã xảy ra lỗi khi nhập hàng.");
+                } finally {
+                    setIsProcessing(false);
+                }
+            };
+
+            const totalValue = importList.reduce((sum, item) => sum + (item.importPrice * item.quantity), 0);
+
+            return (
+                <div className="p-6 bg-gray-50 min-h-screen">
+                    <h2 className="text-3xl font-bold text-gray-800 mb-6">Tạo Phiếu Nhập Hàng</h2>
+                    <div className="mb-6">
+                        <label htmlFor="supplier-select-import" className="block text-lg font-medium text-gray-700 mb-2">Chọn Nhà Cung Cấp</label>
+                        <select id="supplier-select-import" value={selectedSupplierId} onChange={e => setSelectedSupplierId(e.target.value)} className="w-full md:w-1/2 px-4 py-3 border border-gray-300 rounded-lg shadow-sm text-lg">
+                            <option value="">-- Bắt buộc chọn nhà cung cấp --</option>
+                            {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="md:col-span-1 bg-white p-6 rounded-lg shadow-md">
+                            <h3 className="text-xl font-semibold mb-4">Thêm sản phẩm vào phiếu</h3>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Chọn sản phẩm</label>
+                                    <select value={selectedProductId} onChange={e => setSelectedProductId(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                        <option value="">-- Chọn --</option>
+                                        {masterProducts.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                    </select>
+                                </div>
+                                <Input label="Giá nhập" type="number" value={importPrice} onChange={e => setImportPrice(Number(e.target.value))} min="0" />
+                                <Input label="Số lượng" type="number" value={quantity} onChange={e => setQuantity(Number(e.target.value))} min="1" />
+                                <PrimaryButton onClick={addToImportList} className="w-full"><PlusIcon size={20}/> Thêm vào phiếu</PrimaryButton>
                             </div>
                         </div>
-                    ))}
-                </div>
-            </div>
-            <div className="lg:col-span-1 bg-white p-6 rounded-lg shadow-md flex flex-col">
-                <h3 className="text-xl font-semibold mb-4">Hoá đơn</h3>
-                <div className="flex-grow overflow-y-auto">{cart.length === 0 ? <p className="text-gray-500 text-center mt-8">Chưa có sản phẩm</p> : <div className="space-y-3">{cart.map(item => (<div key={item.id} className="flex items-center gap-3"><div className="flex-grow"><p className="font-semibold">{item.name}</p><p className="text-sm text-gray-600">{item.salePrice.toLocaleString('vi-VN')}đ</p></div><Input type="number" value={item.quantity} onChange={(e) => updateQuantity(item.id, Number(e.target.value))} className="w-16 text-center" /><button onClick={() => updateQuantity(item.id, 0)} className="text-red-500 hover:text-red-700"><Trash2 size={18}/></button></div>))}</div>}</div>
-                <div className="mt-6 border-t pt-4">
-                    <div className="flex justify-between items-center text-xl font-bold"><span>Tổng cộng:</span><span>{totalAmount.toLocaleString('vi-VN')}đ</span></div>
-                    <div className="grid grid-cols-2 gap-3 mt-4">
-                        <PrimaryButton onClick={() => handleCheckout('cash')} disabled={cart.length === 0 || isProcessing}>
-                            {isProcessing ? 'Đang xử lý...' : <><DollarSign size={20}/> Tiền mặt</>}
-                        </PrimaryButton>
-                        <PrimaryButton onClick={() => setShowDebtModal(true)} disabled={cart.length === 0 || isProcessing} className="!bg-orange-500 hover:!bg-orange-600">
-                            <FileText size={20}/> Ghi nợ
-                        </PrimaryButton>
+                        <div className="md:col-span-2 bg-white p-6 rounded-lg shadow-md">
+                            <h3 className="text-xl font-semibold mb-4">Chi tiết phiếu nhập</h3>
+                            <div className="overflow-x-auto">
+                                <table className="w-full">
+                                    <thead><tr className="border-b"><th className="p-2 text-left">Sản phẩm</th><th className="p-2 text-center">Số lượng</th><th className="p-2 text-right">Đơn giá</th><th className="p-2 text-right">Thành tiền</th></tr></thead>
+                                    <tbody>
+                                        {importList.map((item, index) => (
+                                            <tr key={index} className="border-b"><td className="p-2">{item.productName}</td><td className="p-2 text-center">{item.quantity}</td><td className="p-2 text-right">{item.importPrice.toLocaleString('vi-VN')}đ</td><td className="p-2 text-right">{(item.importPrice * item.quantity).toLocaleString('vi-VN')}đ</td></tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div className="mt-6 text-right">
+                                <p className="text-2xl font-bold">Tổng cộng: {totalValue.toLocaleString('vi-VN')}đ</p>
+                                <PrimaryButton onClick={handleImport} className="mt-4" disabled={importList.length === 0 || isProcessing || !selectedSupplierId}>
+                                    {isProcessing ? 'Đang xử lý...' : 'Hoàn tất Nhập hàng'}
+                                </PrimaryButton>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
-            {showDebtModal && (
-                <Modal title="Chọn khách hàng để ghi nợ" onClose={() => setShowDebtModal(false)}>
-                    <div className="space-y-4">
-                        <select value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                            <option value="">-- Chọn khách hàng --</option>
-                            {customers.map(c => <option key={c.id} value={c.id}>{c.name} - {c.phone}</option>)}
-                        </select>
-                        <PrimaryButton onClick={() => handleCheckout('credit', selectedCustomerId)} className="w-full" disabled={!selectedCustomerId || isProcessing}>
-                           {isProcessing ? 'Đang xử lý...' : 'Xác nhận Ghi nợ'}
-                        </PrimaryButton>
-                    </div>
-                </Modal>
-            )}
-        </div>
-    );
-};
-
-const DebtManagement = ({ db, userId }) => {
-    const [customers, setCustomers] = useState([]);
-    const [transactions, setTransactions] = useState([]);
-    const [selectedCustomerId, setSelectedCustomerId] = useState(null);
-    const [paymentAmount, setPaymentAmount] = useState('');
-    
-    const customersCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/customers`), [userId]);
-    const salesCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/salesTransactions`), [userId]);
-    const paymentsCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/paymentTransactions`), [userId]);
-
-    useEffect(() => {
-        const unsubscribe = onSnapshot(customersCollectionRef, snapshot => {
-            setCustomers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        });
-        return unsubscribe;
-    }, [customersCollectionRef]);
-
-    useEffect(() => {
-        if (!selectedCustomerId) {
-            setTransactions([]);
-            return;
-        }
-
-        const salesQuery = query(salesCollectionRef, where("customerId", "==", selectedCustomerId));
-        const paymentsQuery = query(paymentsCollectionRef, where("customerId", "==", selectedCustomerId));
-
-        const unsubSales = onSnapshot(salesQuery, (snapshot) => {
-            const salesData = snapshot.docs.map(doc => ({ ...doc.data(), type: 'sale' }));
-            setTransactions(prev => [...salesData, ...prev.filter(t => t.type !== 'sale')].sort((a,b) => b.createdAt.toMillis() - a.createdAt.toMillis()));
-        });
-
-        const unsubPayments = onSnapshot(paymentsQuery, (snapshot) => {
-            const paymentsData = snapshot.docs.map(doc => ({ ...doc.data(), type: 'payment' }));
-            setTransactions(prev => [...paymentsData, ...prev.filter(t => t.type !== 'payment')].sort((a,b) => b.createdAt.toMillis() - a.createdAt.toMillis()));
-        });
-
-        return () => {
-            unsubSales();
-            unsubPayments();
+            );
         };
-    }, [selectedCustomerId, salesCollectionRef, paymentsCollectionRef]);
 
-    const handleRecordPayment = async () => {
-        if (!selectedCustomerId || !paymentAmount || Number(paymentAmount) <= 0) {
-            alert("Vui lòng nhập số tiền hợp lệ.");
-            return;
-        }
-        const amount = Number(paymentAmount);
-        const customerRef = doc(customersCollectionRef, selectedCustomerId);
-        
-        try {
-            await runTransaction(db, async (transaction) => {
-                const customerDoc = await transaction.get(customerRef);
-                if (!customerDoc.exists()) throw new Error("Khách hàng không tồn tại");
-                const currentDebt = customerDoc.data().debt || 0;
-                const newDebt = currentDebt - amount;
-                transaction.update(customerRef, { debt: newDebt < 0 ? 0 : newDebt });
-                
-                const paymentRef = doc(paymentsCollectionRef);
-                transaction.set(paymentRef, {
-                    customerId: selectedCustomerId,
-                    customerName: customerDoc.data().name,
-                    amount: amount,
-                    createdAt: Timestamp.now()
+        const PointOfSale = ({ db, userId }) => {
+            const [products, setProducts] = useState([]);
+            const [inventoryLots, setInventoryLots] = useState([]);
+            const [customers, setCustomers] = useState([]);
+            const [cart, setCart] = useState([]);
+            const [searchTerm, setSearchTerm] = useState('');
+            const [showDebtModal, setShowDebtModal] = useState(false);
+            const [selectedCustomerId, setSelectedCustomerId] = useState('');
+            const [isProcessing, setIsProcessing] = useState(false);
+
+            const customersCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/customers`), [userId]);
+            const productsCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/products`), [userId]);
+            const lotsCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/inventory_lots`), [userId]);
+
+            useEffect(() => {
+                const unsubProducts = onSnapshot(productsCollectionRef, snapshot => setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+                const unsubCustomers = onSnapshot(customersCollectionRef, snapshot => setCustomers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+                const unsubLots = onSnapshot(lotsCollectionRef, snapshot => setInventoryLots(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+                return () => { unsubProducts(); unsubCustomers(); unsubLots(); };
+            }, [productsCollectionRef, customersCollectionRef, lotsCollectionRef]);
+
+            const productsWithStock = useMemo(() => {
+                return products.map(p => {
+                    const totalStock = inventoryLots
+                        .filter(lot => lot.productId === p.id)
+                        .reduce((sum, lot) => sum + lot.currentQuantity, 0);
+                    return { ...p, stock: totalStock };
                 });
-            });
-            alert("Ghi nhận thanh toán thành công!");
-            setPaymentAmount('');
-        } catch (error) {
-            console.error("Lỗi ghi nhận thanh toán:", error);
-            alert("Lỗi: " + error.message);
-        }
-    };
+            }, [products, inventoryLots]);
 
-    const customersWithDebt = customers.filter(c => c.debt > 0);
-    const selectedCustomerData = customers.find(c => c.id === selectedCustomerId);
-
-    return (
-        <div className="p-6 bg-gray-50 min-h-screen grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="md:col-span-1">
-                <h2 className="text-3xl font-bold text-gray-800 mb-6">Khách hàng còn nợ</h2>
-                <div className="bg-white p-4 rounded-lg shadow-md space-y-2 max-h-[75vh] overflow-y-auto">
-                    {customersWithDebt.length > 0 ? customersWithDebt.map(c => (
-                        <div key={c.id} onClick={() => setSelectedCustomerId(c.id)} className={`p-3 rounded-lg cursor-pointer ${selectedCustomerId === c.id ? 'bg-blue-100' : 'hover:bg-gray-100'}`}>
-                            <p className="font-semibold">{c.name}</p>
-                            <p className="text-red-600 font-bold">{c.debt?.toLocaleString('vi-VN')}đ</p>
-                        </div>
-                    )) : <p className="text-gray-500">Không có khách hàng nào nợ.</p>}
-                </div>
-            </div>
-            <div className="md:col-span-2">
-                <h2 className="text-3xl font-bold text-gray-800 mb-6">Chi tiết công nợ</h2>
-                {selectedCustomerData ? (
-                    <div className="bg-white p-6 rounded-lg shadow-md">
-                        <h3 className="text-xl font-bold mb-2">{selectedCustomerData.name}</h3>
-                        <p className="text-2xl font-bold text-red-600 mb-4">Tổng nợ: {selectedCustomerData.debt?.toLocaleString('vi-VN')}đ</p>
-                        <div className="space-y-4 mb-6">
-                            <Input label="Số tiền thanh toán" type="number" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} placeholder="Nhập số tiền khách trả" />
-                            <PrimaryButton onClick={handleRecordPayment} className="w-full"><Landmark size={20} /> Ghi nhận thanh toán</PrimaryButton>
-                        </div>
-                        <h4 className="font-semibold mt-6 border-t pt-4">Lịch sử giao dịch:</h4>
-                        <ul className="space-y-2 mt-2 max-h-60 overflow-y-auto">
-                            {transactions.map((t, index) => (
-                                <li key={index} className={`flex justify-between items-center p-2 rounded-md ${t.type === 'sale' ? 'bg-red-50' : 'bg-green-50'}`}>
-                                    <div>
-                                        <p className="font-semibold">{t.type === 'sale' ? 'Mua hàng' : 'Thanh toán'}</p>
-                                        <p className="text-xs text-gray-500">{t.createdAt.toDate().toLocaleString('vi-VN')}</p>
-                                    </div>
-                                    <p className={`font-bold flex items-center gap-1 ${t.type === 'sale' ? 'text-red-600' : 'text-green-700'}`}>
-                                        {t.type === 'sale' ? <ArrowUp size={14}/> : <ArrowDown size={14}/>}
-                                        {(t.totalAmount || t.amount).toLocaleString('vi-VN')}đ
-                                    </p>
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
-                ) : <p className="text-gray-500 mt-8">Chọn một khách hàng để xem chi tiết.</p>}
-            </div>
-        </div>
-    );
-};
-
-const ReportingDashboard = ({ db, userId }) => {
-    const [stats, setStats] = useState({ revenueToday: 0, profitToday: 0, topProducts: [] });
-    const [weeklyRevenue, setWeeklyRevenue] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const salesCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/salesTransactions`), [userId]);
-
-    useEffect(() => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(today.getDate() - 6);
-        sevenDaysAgo.setHours(0, 0, 0, 0);
-        
-        const q = query(salesCollectionRef, where('createdAt', '>=', Timestamp.fromDate(sevenDaysAgo)));
-        
-        const unsubscribe = onSnapshot(q, (querySnapshot) => {
-            setIsLoading(true);
-            let revenueToday = 0;
-            let profitToday = 0;
-            const productSales = {};
-            const weeklyData = Array(7).fill(0).map((_, i) => {
-                const d = new Date();
-                d.setDate(new Date().getDate() - i);
-                return { date: d.toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit' }), revenue: 0 };
-            }).reverse();
-
-            querySnapshot.forEach(doc => {
-                const sale = doc.data();
-                const saleDate = sale.createdAt.toDate();
-
-                if (saleDate >= today) {
-                    revenueToday += sale.totalAmount;
-                    profitToday += sale.totalAmount - (sale.totalCost || 0);
+            const addToCart = (product) => {
+                if (product.stock <= 0) { alert(`Sản phẩm "${product.name}" đã hết hàng.`); return; }
+                const existingItem = cart.find(item => item.id === product.id);
+                if (existingItem) {
+                    if (existingItem.quantity >= product.stock) { alert(`Số lượng mua vượt quá tồn kho (${product.stock}).`); return; }
+                    setCart(cart.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item));
+                } else {
+                    setCart([...cart, { ...product, quantity: 1 }]);
                 }
-                
-                const dayStr = saleDate.toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit' });
-                const dayIndex = weeklyData.findIndex(d => d.date === dayStr);
-                if(dayIndex > -1) { weeklyData[dayIndex].revenue += sale.totalAmount; }
+            };
 
-                sale.items.forEach(item => { productSales[item.name] = (productSales[item.name] || 0) + item.quantity; });
-            });
+            const updateQuantity = (productId, newQuantity) => {
+                const product = productsWithStock.find(p => p.id === productId);
+                if (newQuantity <= 0) { setCart(cart.filter(item => item.id !== productId)); }
+                else if (newQuantity > product.stock) {
+                    alert(`Số lượng mua vượt quá tồn kho (${product.stock}).`);
+                    setCart(cart.map(item => item.id === productId ? { ...item, quantity: product.stock } : item));
+                } else {
+                    setCart(cart.map(item => item.id === productId ? { ...item, quantity: newQuantity } : item));
+                }
+            };
+            
+            const handleCheckout = async (paymentMethod = 'cash', customerId = null) => {
+                if (cart.length === 0 || isProcessing) return;
+                if (paymentMethod === 'credit' && !customerId) {
+                    alert("Vui lòng chọn khách hàng để ghi nợ."); return;
+                }
+                setIsProcessing(true);
 
-            const topProducts = Object.entries(productSales).sort((a, b) => b[1] - a[1]).slice(0, 5);
-            setStats({ revenueToday, profitToday, topProducts });
-            setWeeklyRevenue(weeklyData);
-            setIsLoading(false);
-        });
-        return unsubscribe;
-    }, [salesCollectionRef]);
-    
-    const maxWeeklyRevenue = Math.max(...weeklyRevenue.map(d => d.revenue), 1);
+                try {
+                    const actionPlan = {
+                        updates: [],
+                        totalCost: 0,
+                        totalAmount: cart.reduce((sum, item) => sum + item.salePrice * item.quantity, 0),
+                        saleItems: []
+                    };
 
-    return (
-        <div className="p-6 bg-gray-50 min-h-screen">
-            <h2 className="text-3xl font-bold text-gray-800 mb-6">Báo cáo & Thống kê</h2>
-            {isLoading ? <p>Đang tải báo cáo...</p> : (
-                <>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                        <div className="bg-white p-6 rounded-lg shadow-md text-center"><h3 className="text-lg text-gray-500">Doanh thu hôm nay</h3><p className="text-3xl font-bold text-green-600">{stats.revenueToday.toLocaleString('vi-VN')}đ</p></div>
-                        <div className="bg-white p-6 rounded-lg shadow-md text-center"><h3 className="text-lg text-gray-500">Lợi nhuận hôm nay</h3><p className="text-3xl font-bold text-blue-600">{stats.profitToday.toLocaleString('vi-VN')}đ</p></div>
-                        <div className="bg-white p-6 rounded-lg shadow-md"><h3 className="text-lg text-center mb-2 text-gray-500">Sản phẩm bán chạy</h3>
-                            <ul className="space-y-1">{stats.topProducts.map(([name, qty]) => <li key={name} className="flex justify-between"><span>{name}</span><span className="font-semibold">{qty}</span></li>)}</ul>
+                    for (const cartItem of cart) {
+                        let quantityToSell = cartItem.quantity;
+                        const productLotsQuery = query(
+                            lotsCollectionRef,
+                            where("productId", "==", cartItem.id),
+                            where("currentQuantity", ">", 0),
+                            orderBy("createdAt", "asc")
+                        );
+                        const lotSnapshots = await getDocs(productLotsQuery);
+
+                        const currentTotalStock = lotSnapshots.docs.reduce((sum, doc) => sum + doc.data().currentQuantity, 0);
+                        if (currentTotalStock < quantityToSell) {
+                            throw new Error(`Không đủ hàng cho "${cartItem.name}". Chỉ còn ${currentTotalStock} trong kho.`);
+                        }
+
+                        for (const lotDoc of lotSnapshots.docs) {
+                            if (quantityToSell <= 0) break;
+                            const lotData = lotDoc.data();
+                            const sellFromThisLot = Math.min(quantityToSell, lotData.currentQuantity);
+                            
+                            actionPlan.totalCost += sellFromThisLot * lotData.importPrice;
+                            actionPlan.updates.push({ 
+                                lotId: lotDoc.id, 
+                                newQuantity: lotData.currentQuantity - sellFromThisLot 
+                            });
+                            
+                            quantityToSell -= sellFromThisLot;
+                        }
+                        actionPlan.saleItems.push({
+                            productId: cartItem.id, name: cartItem.name, quantity: cartItem.quantity,
+                            salePrice: cartItem.salePrice,
+                        });
+                    }
+
+                    await runTransaction(db, async (transaction) => {
+                        if (paymentMethod === 'credit' && customerId) {
+                            const customerRef = doc(customersCollectionRef, customerId);
+                            const customerDoc = await transaction.get(customerRef);
+                            if (!customerDoc.exists()) throw new Error("Khách hàng không tồn tại.");
+                            const currentDebt = customerDoc.data().debt || 0;
+                            transaction.update(customerRef, { debt: currentDebt + actionPlan.totalAmount });
+                        }
+                        
+                        for (const update of actionPlan.updates) {
+                            const lotRef = doc(lotsCollectionRef, update.lotId);
+                            transaction.update(lotRef, { currentQuantity: update.newQuantity });
+                        }
+
+                        const salesRef = doc(collection(db, `artifacts/${appId}/users/${userId}/salesTransactions`));
+                        const customerName = customerId ? customers.find(c => c.id === customerId)?.name : null;
+                        transaction.set(salesRef, {
+                            createdAt: Timestamp.now(), items: actionPlan.saleItems, 
+                            totalAmount: actionPlan.totalAmount, totalCost: actionPlan.totalCost,
+                            paymentMethod, customerId, customerName
+                        });
+                    });
+
+                    alert("Giao dịch thành công!");
+                    setCart([]);
+                    setShowDebtModal(false);
+                    setSelectedCustomerId('');
+
+                } catch (error) {
+                    console.error("Lỗi giao dịch:", error);
+                    alert(`Giao dịch thất bại: ${error.message}`);
+                } finally {
+                    setIsProcessing(false);
+                }
+            };
+
+            const filteredProducts = searchTerm ? productsWithStock.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())) : productsWithStock;
+            const totalAmount = cart.reduce((sum, item) => sum + (item.salePrice * item.quantity), 0);
+
+            return (
+                <div className="p-6 bg-gray-50 min-h-screen grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-2">
+                        <h2 className="text-3xl font-bold text-gray-800 mb-4">Bán Hàng</h2>
+                        <div className="mb-4 relative">
+                            <Input id="search-pos" type="text" placeholder="Tìm tên sản phẩm..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10"/>
+                            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
                         </div>
-                    </div>
-                    <div className="bg-white p-6 rounded-lg shadow-md">
-                        <h3 className="text-xl font-bold mb-4">Doanh thu 7 ngày qua</h3>
-                        <div className="flex justify-around items-end h-64 gap-2 pt-4">
-                            {weeklyRevenue.map(day => (
-                                <div key={day.date} className="flex flex-col items-center flex-1 h-full justify-end">
-                                    <div className="text-xs text-gray-500 font-semibold">{day.revenue > 0 ? (day.revenue/1000).toFixed(0)+'k' : ''}</div>
-                                    <div className="w-full bg-blue-200 rounded-t-md hover:bg-blue-400 transition-colors" style={{ height: `${(day.revenue / maxWeeklyRevenue) * 100}%` }}></div>
-                                    <div className="text-sm font-semibold mt-1">{day.date.split(' ')[0]}</div>
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-[75vh] overflow-y-auto p-2">
+                            {filteredProducts.map(product => (
+                                <div key={product.id} onClick={() => addToCart(product)} className="bg-white p-4 rounded-lg shadow-md hover:shadow-lg hover:border-blue-500 border-2 border-transparent cursor-pointer transition-all text-center flex flex-col justify-between">
+                                    <p className="font-semibold text-gray-800 truncate">{product.name}</p>
+                                    <div>
+                                        <p className="text-blue-600 font-bold">{product.salePrice.toLocaleString('vi-VN')}đ</p>
+                                        <p className={`text-sm ${product.stock > 0 ? 'text-gray-500' : 'text-red-500 font-bold'}`}>{product.stock > 0 ? `Kho: ${product.stock}` : 'Hết hàng'}</p>
+                                    </div>
                                 </div>
                             ))}
                         </div>
                     </div>
-                </>
-            )}
-        </div>
-    );
-};
+                    <div className="lg:col-span-1 bg-white p-6 rounded-lg shadow-md flex flex-col">
+                        <h3 className="text-xl font-semibold mb-4">Hoá đơn</h3>
+                        <div className="flex-grow overflow-y-auto">{cart.length === 0 ? <p className="text-gray-500 text-center mt-8">Chưa có sản phẩm</p> : <div className="space-y-3">{cart.map(item => (<div key={item.id} className="flex items-center gap-3"><div className="flex-grow"><p className="font-semibold">{item.name}</p><p className="text-sm text-gray-600">{item.salePrice.toLocaleString('vi-VN')}đ</p></div><Input type="number" value={item.quantity} onChange={(e) => updateQuantity(item.id, Number(e.target.value))} className="w-16 text-center" /><button onClick={() => updateQuantity(item.id, 0)} className="text-red-500 hover:text-red-700"><Trash2Icon size={18}/></button></div>))}</div>}</div>
+                        <div className="mt-6 border-t pt-4">
+                            <div className="flex justify-between items-center text-xl font-bold"><span>Tổng cộng:</span><span>{totalAmount.toLocaleString('vi-VN')}đ</span></div>
+                            <div className="grid grid-cols-2 gap-3 mt-4">
+                                <PrimaryButton onClick={() => handleCheckout('cash')} disabled={cart.length === 0 || isProcessing}>
+                                    {isProcessing ? 'Đang xử lý...' : <><DollarSignIcon size={20}/> Tiền mặt</>}
+                                </PrimaryButton>
+                                <PrimaryButton onClick={() => setShowDebtModal(true)} disabled={cart.length === 0 || isProcessing} className="!bg-orange-500 hover:!bg-orange-600">
+                                    <FileTextIcon size={20}/> Ghi nợ
+                                </PrimaryButton>
+                            </div>
+                        </div>
+                    </div>
+                    {showDebtModal && (
+                        <Modal title="Chọn khách hàng để ghi nợ" onClose={() => setShowDebtModal(false)}>
+                            <div className="space-y-4">
+                                <select value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                    <option value="">-- Chọn khách hàng --</option>
+                                    {customers.map(c => <option key={c.id} value={c.id}>{c.name} - {c.phone}</option>)}
+                                </select>
+                                <PrimaryButton onClick={() => handleCheckout('credit', selectedCustomerId)} className="w-full" disabled={!selectedCustomerId || isProcessing}>
+                                   {isProcessing ? 'Đang xử lý...' : 'Xác nhận Ghi nợ'}
+                                </PrimaryButton>
+                            </div>
+                        </Modal>
+                    )}
+                </div>
+            );
+        };
+
+        const DebtManagement = ({ db, userId }) => {
+            const [customers, setCustomers] = useState([]);
+            const [transactions, setTransactions] = useState([]);
+            const [selectedCustomerId, setSelectedCustomerId] = useState(null);
+            const [paymentAmount, setPaymentAmount] = useState('');
+            
+            const customersCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/customers`), [userId]);
+            const salesCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/salesTransactions`), [userId]);
+            const paymentsCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/paymentTransactions`), [userId]);
+
+            useEffect(() => {
+                const unsubscribe = onSnapshot(customersCollectionRef, snapshot => {
+                    setCustomers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                });
+                return unsubscribe;
+            }, [customersCollectionRef]);
+
+            useEffect(() => {
+                if (!selectedCustomerId) {
+                    setTransactions([]);
+                    return;
+                }
+
+                const salesQuery = query(salesCollectionRef, where("customerId", "==", selectedCustomerId));
+                const paymentsQuery = query(paymentsCollectionRef, where("customerId", "==", selectedCustomerId));
+
+                const unsubSales = onSnapshot(salesQuery, (snapshot) => {
+                    const salesData = snapshot.docs.map(doc => ({ ...doc.data(), type: 'sale' }));
+                    setTransactions(prev => [...salesData, ...prev.filter(t => t.type !== 'sale')].sort((a,b) => b.createdAt.toMillis() - a.createdAt.toMillis()));
+                });
+
+                const unsubPayments = onSnapshot(paymentsQuery, (snapshot) => {
+                    const paymentsData = snapshot.docs.map(doc => ({ ...doc.data(), type: 'payment' }));
+                    setTransactions(prev => [...paymentsData, ...prev.filter(t => t.type !== 'payment')].sort((a,b) => b.createdAt.toMillis() - a.createdAt.toMillis()));
+                });
+
+                return () => {
+                    unsubSales();
+                    unsubPayments();
+                };
+            }, [selectedCustomerId, salesCollectionRef, paymentsCollectionRef]);
+
+            const handleRecordPayment = async () => {
+                if (!selectedCustomerId || !paymentAmount || Number(paymentAmount) <= 0) {
+                    alert("Vui lòng nhập số tiền hợp lệ.");
+                    return;
+                }
+                const amount = Number(paymentAmount);
+                const customerRef = doc(customersCollectionRef, selectedCustomerId);
+                
+                try {
+                    await runTransaction(db, async (transaction) => {
+                        const customerDoc = await transaction.get(customerRef);
+                        if (!customerDoc.exists()) throw new Error("Khách hàng không tồn tại");
+                        const currentDebt = customerDoc.data().debt || 0;
+                        const newDebt = currentDebt - amount;
+                        transaction.update(customerRef, { debt: newDebt < 0 ? 0 : newDebt });
+                        
+                        const paymentRef = doc(paymentsCollectionRef);
+                        transaction.set(paymentRef, {
+                            customerId: selectedCustomerId,
+                            customerName: customerDoc.data().name,
+                            amount: amount,
+                            createdAt: Timestamp.now()
+                        });
+                    });
+                    alert("Ghi nhận thanh toán thành công!");
+                    setPaymentAmount('');
+                } catch (error) {
+                    console.error("Lỗi ghi nhận thanh toán:", error);
+                    alert("Lỗi: " + error.message);
+                }
+            };
+
+            const customersWithDebt = customers.filter(c => c.debt > 0);
+            const selectedCustomerData = customers.find(c => c.id === selectedCustomerId);
+
+            return (
+                <div className="p-6 bg-gray-50 min-h-screen grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="md:col-span-1">
+                        <h2 className="text-3xl font-bold text-gray-800 mb-6">Khách hàng còn nợ</h2>
+                        <div className="bg-white p-4 rounded-lg shadow-md space-y-2 max-h-[75vh] overflow-y-auto">
+                            {customersWithDebt.length > 0 ? customersWithDebt.map(c => (
+                                <div key={c.id} onClick={() => setSelectedCustomerId(c.id)} className={`p-3 rounded-lg cursor-pointer ${selectedCustomerId === c.id ? 'bg-blue-100' : 'hover:bg-gray-100'}`}>
+                                    <p className="font-semibold">{c.name}</p>
+                                    <p className="text-red-600 font-bold">{c.debt?.toLocaleString('vi-VN')}đ</p>
+                                </div>
+                            )) : <p className="text-gray-500">Không có khách hàng nào nợ.</p>}
+                        </div>
+                    </div>
+                    <div className="md:col-span-2">
+                        <h2 className="text-3xl font-bold text-gray-800 mb-6">Chi tiết công nợ</h2>
+                        {selectedCustomerData ? (
+                            <div className="bg-white p-6 rounded-lg shadow-md">
+                                <h3 className="text-xl font-bold mb-2">{selectedCustomerData.name}</h3>
+                                <p className="text-2xl font-bold text-red-600 mb-4">Tổng nợ: {selectedCustomerData.debt?.toLocaleString('vi-VN')}đ</p>
+                                <div className="space-y-4 mb-6">
+                                    <Input label="Số tiền thanh toán" type="number" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} placeholder="Nhập số tiền khách trả" />
+                                    <PrimaryButton onClick={handleRecordPayment} className="w-full"><LandmarkIcon size={20} /> Ghi nhận thanh toán</PrimaryButton>
+                                </div>
+                                <h4 className="font-semibold mt-6 border-t pt-4">Lịch sử giao dịch:</h4>
+                                <ul className="space-y-2 mt-2 max-h-60 overflow-y-auto">
+                                    {transactions.map((t, index) => (
+                                        <li key={index} className={`flex justify-between items-center p-2 rounded-md ${t.type === 'sale' ? 'bg-red-50' : 'bg-green-50'}`}>
+                                            <div>
+                                                <p className="font-semibold">{t.type === 'sale' ? 'Mua hàng' : 'Thanh toán'}</p>
+                                                <p className="text-xs text-gray-500">{t.createdAt.toDate().toLocaleString('vi-VN')}</p>
+                                            </div>
+                                            <p className={`font-bold flex items-center gap-1 ${t.type === 'sale' ? 'text-red-600' : 'text-green-700'}`}>
+                                                {t.type === 'sale' ? <ArrowUpIcon size={14}/> : <ArrowDownIcon size={14}/>}
+                                                {(t.totalAmount || t.amount).toLocaleString('vi-VN')}đ
+                                            </p>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        ) : <p className="text-gray-500 mt-8">Chọn một khách hàng để xem chi tiết.</p>}
+                    </div>
+                </div>
+            );
+        };
+
+        const ReportingDashboard = ({ db, userId }) => {
+            const [stats, setStats] = useState({ revenueToday: 0, profitToday: 0, topProducts: [] });
+            const [weeklyRevenue, setWeeklyRevenue] = useState([]);
+            const [isLoading, setIsLoading] = useState(true);
+            const salesCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/salesTransactions`), [userId]);
+
+            useEffect(() => {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const sevenDaysAgo = new Date();
+                sevenDaysAgo.setDate(today.getDate() - 6);
+                sevenDaysAgo.setHours(0, 0, 0, 0);
+                
+                const q = query(salesCollectionRef, where('createdAt', '>=', Timestamp.fromDate(sevenDaysAgo)));
+                
+                const unsubscribe = onSnapshot(q, (querySnapshot) => {
+                    setIsLoading(true);
+                    let revenueToday = 0;
+                    let profitToday = 0;
+                    const productSales = {};
+                    const weeklyData = Array(7).fill(0).map((_, i) => {
+                        const d = new Date();
+                        d.setDate(new Date().getDate() - i);
+                        return { date: d.toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit' }), revenue: 0 };
+                    }).reverse();
+
+                    querySnapshot.forEach(doc => {
+                        const sale = doc.data();
+                        const saleDate = sale.createdAt.toDate();
+
+                        if (saleDate >= today) {
+                            revenueToday += sale.totalAmount;
+                            profitToday += sale.totalAmount - (sale.totalCost || 0);
+                        }
+                        
+                        const dayStr = saleDate.toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit' });
+                        const dayIndex = weeklyData.findIndex(d => d.date === dayStr);
+                        if(dayIndex > -1) { weeklyData[dayIndex].revenue += sale.totalAmount; }
+
+                        sale.items.forEach(item => { productSales[item.name] = (productSales[item.name] || 0) + item.quantity; });
+                    });
+
+                    const topProducts = Object.entries(productSales).sort((a, b) => b[1] - a[1]).slice(0, 5);
+                    setStats({ revenueToday, profitToday, topProducts });
+                    setWeeklyRevenue(weeklyData);
+                    setIsLoading(false);
+                });
+                return unsubscribe;
+            }, [salesCollectionRef]);
+            
+            const maxWeeklyRevenue = Math.max(...weeklyRevenue.map(d => d.revenue), 1);
+
+            return (
+                <div className="p-6 bg-gray-50 min-h-screen">
+                    <h2 className="text-3xl font-bold text-gray-800 mb-6">Báo cáo & Thống kê</h2>
+                    {isLoading ? <p>Đang tải báo cáo...</p> : (
+                        <>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                                <div className="bg-white p-6 rounded-lg shadow-md text-center"><h3 className="text-lg text-gray-500">Doanh thu hôm nay</h3><p className="text-3xl font-bold text-green-600">{stats.revenueToday.toLocaleString('vi-VN')}đ</p></div>
+                                <div className="bg-white p-6 rounded-lg shadow-md text-center"><h3 className="text-lg text-gray-500">Lợi nhuận hôm nay</h3><p className="text-3xl font-bold text-blue-600">{stats.profitToday.toLocaleString('vi-VN')}đ</p></div>
+                                <div className="bg-white p-6 rounded-lg shadow-md"><h3 className="text-lg text-center mb-2 text-gray-500">Sản phẩm bán chạy</h3>
+                                    <ul className="space-y-1">{stats.topProducts.map(([name, qty]) => <li key={name} className="flex justify-between"><span>{name}</span><span className="font-semibold">{qty}</span></li>)}</ul>
+                                </div>
+                            </div>
+                            <div className="bg-white p-6 rounded-lg shadow-md">
+                                <h3 className="text-xl font-bold mb-4">Doanh thu 7 ngày qua</h3>
+                                <div className="flex justify-around items-end h-64 gap-2 pt-4">
+                                    {weeklyRevenue.map(day => (
+                                        <div key={day.date} className="flex flex-col items-center flex-1 h-full justify-end">
+                                            <div className="text-xs text-gray-500 font-semibold">{day.revenue > 0 ? (day.revenue/1000).toFixed(0)+'k' : ''}</div>
+                                            <div className="w-full bg-blue-200 rounded-t-md hover:bg-blue-400 transition-colors" style={{ height: `${(day.revenue / maxWeeklyRevenue) * 100}%` }}></div>
+                                            <div className="text-sm font-semibold mt-1">{day.date.split(' ')[0]}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </div>
+            );
+        };
 
 
-// --- COMPONENT APP CHÍNH ---
-const MainApp = () => {
-    const [view, setView] = useState('pos');
-    const [user, setUser] = useState(null);
-    const [isAuthReady, setIsAuthReady] = useState(false);
+        const MainApp = () => {
+            const [view, setView] = useState('pos');
+            const [user, setUser] = useState(null);
+            const [isAuthReady, setIsAuthReady] = useState(false);
 
-    useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-            setUser(currentUser);
-            setIsAuthReady(true);
-        });
-        return () => unsubscribe();
-    }, []);
+            useEffect(() => {
+                const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+                    setUser(currentUser);
+                    setIsAuthReady(true);
+                });
+                return () => unsubscribe();
+            }, []);
 
-    const handleLogout = async () => {
-        await signOut(auth);
-    };
+            const handleLogout = async () => {
+                await signOut(auth);
+            };
 
-    const NavItem = ({ icon, label, active, onClick }) => (
-        <button onClick={onClick} className={`flex flex-col md:flex-row items-center gap-2 md:gap-3 w-full p-3 rounded-lg text-sm md:text-base transition-colors ${active ? 'bg-blue-600 text-white shadow-md' : 'text-gray-600 hover:bg-gray-200'}`}>
-            {icon}
-            <span className="font-semibold">{label}</span>
-        </button>
-    );
+            const NavItem = ({ icon, label, active, onClick }) => (
+                <button onClick={onClick} className={`flex flex-col md:flex-row items-center gap-2 md:gap-3 w-full p-3 rounded-lg text-sm md:text-base transition-colors ${active ? 'bg-blue-600 text-white shadow-md' : 'text-gray-600 hover:bg-gray-200'}`}>
+                    {icon}
+                    <span className="font-semibold">{label}</span>
+                </button>
+            );
 
-    const renderView = () => {
-        if (!user) return null;
-        switch (view) {
-            case 'products': return <ProductManagement db={db} userId={user.uid} />;
-            case 'import': return <InventoryImport db={db} userId={user.uid} />;
-            case 'suppliers': return <SupplierManagement db={db} userId={user.uid} />;
-            case 'customers': return <CustomerManagement db={db} userId={user.uid} />;
-            case 'debt': return <DebtManagement db={db} userId={user.uid} />;
-            case 'reports': return <ReportingDashboard db={db} userId={user.uid} />;
-            case 'pos': default: return <PointOfSale db={db} userId={user.uid} />;
+            const renderView = () => {
+                if (!user) return null;
+                switch (view) {
+                    case 'products': return <ProductManagement db={db} userId={user.uid} />;
+                    case 'import': return <InventoryImport db={db} userId={user.uid} />;
+                    case 'suppliers': return <SupplierManagement db={db} userId={user.uid} />;
+                    case 'customers': return <CustomerManagement db={db} userId={user.uid} />;
+                    case 'debt': return <DebtManagement db={db} userId={user.uid} />;
+                    case 'reports': return <ReportingDashboard db={db} userId={user.uid} />;
+                    case 'pos': default: return <PointOfSale db={db} userId={user.uid} />;
+                }
+            };
+
+            if (!isAuthReady) {
+                return <div className="flex justify-center items-center h-screen"><p>Đang tải ứng dụng...</p></div>;
+            }
+
+            if (!user) {
+                return <AuthScreen />;
+            }
+
+            return (
+                <div className="flex flex-col md:flex-row h-screen bg-gray-100 font-sans">
+                    <nav className="w-full md:w-64 bg-white border-r border-gray-200 p-4 flex flex-row md:flex-col justify-between md:justify-start gap-2">
+                        <div className="hidden md:flex flex-col items-center mb-6">
+                            <h1 className="text-2xl font-bold text-blue-700">Tạp Hoá Pro</h1>
+                            <p className="text-xs text-gray-500 text-center truncate px-2" title={user.email}>{user.email}</p>
+                        </div>
+                        <div className="flex flex-row md:flex-col w-full justify-around md:justify-start gap-2">
+                            <NavItem icon={<ShoppingCartIcon size={24} />} label="Bán hàng" active={view === 'pos'} onClick={() => setView('pos')} />
+                            <NavItem icon={<BarChart2Icon size={24} />} label="Báo cáo" active={view === 'reports'} onClick={() => setView('reports')} />
+                            <NavItem icon={<PackageIcon size={24} />} label="Sản phẩm" active={view === 'products'} onClick={() => setView('products')} />
+                            <NavItem icon={<ArchiveIcon size={24} />} label="Nhập hàng" active={view === 'import'} onClick={() => setView('import')} />
+                            <NavItem icon={<HandshakeIcon size={24} />} label="Công nợ" active={view === 'debt'} onClick={() => setView('debt')} />
+                            <NavItem icon={<UserPlusIcon size={24} />} label="Khách hàng" active={view === 'customers'} onClick={() => setView('customers')} />
+                            <NavItem icon={<TruckIcon size={24} />} label="Nhà cung cấp" active={view === 'suppliers'} onClick={() => setView('suppliers')} />
+                        </div>
+                        <div className="mt-auto hidden md:block">
+                             <NavItem icon={<LogOutIcon size={24} />} label="Đăng xuất" active={false} onClick={handleLogout} />
+                        </div>
+                         <div className="block md:hidden">
+                             <NavItem icon={<LogOutIcon size={24} />} label="Đăng xuất" active={false} onClick={handleLogout} />
+                        </div>
+                    </nav>
+                    <main className="flex-1 overflow-y-auto">
+                        {renderView()}
+                    </main>
+                </div>
+            );
         }
-    };
 
-    if (!isAuthReady) {
-        return <div className="flex justify-center items-center h-screen"><p>Đang tải ứng dụng...</p></div>;
-    }
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<MainApp />);
+    </script>
 
-    if (!user) {
-        return <AuthScreen />;
-    }
-
-    return (
-        <div className="flex flex-col md:flex-row h-screen bg-gray-100 font-sans">
-            <nav className="w-full md:w-64 bg-white border-r border-gray-200 p-4 flex flex-row md:flex-col justify-between md:justify-start gap-2">
-                <div className="hidden md:flex flex-col items-center mb-6">
-                    <h1 className="text-2xl font-bold text-blue-700">Tạp Hoá Pro</h1>
-                    <p className="text-xs text-gray-500 text-center truncate px-2" title={user.email}>{user.email}</p>
-                </div>
-                <div className="flex flex-row md:flex-col w-full justify-around md:justify-start gap-2">
-                    <NavItem icon={<ShoppingCart size={24} />} label="Bán hàng" active={view === 'pos'} onClick={() => setView('pos')} />
-                    <NavItem icon={<BarChart2 size={24} />} label="Báo cáo" active={view === 'reports'} onClick={() => setView('reports')} />
-                    <NavItem icon={<Package size={24} />} label="Sản phẩm" active={view === 'products'} onClick={() => setView('products')} />
-                    <NavItem icon={<Archive size={24} />} label="Nhập hàng" active={view === 'import'} onClick={() => setView('import')} />
-                    <NavItem icon={<Handshake size={24} />} label="Công nợ" active={view === 'debt'} onClick={() => setView('debt')} />
-                    <NavItem icon={<UserPlus size={24} />} label="Khách hàng" active={view === 'customers'} onClick={() => setView('customers')} />
-                    <NavItem icon={<Truck size={24} />} label="Nhà cung cấp" active={view === 'suppliers'} onClick={() => setView('suppliers')} />
-                </div>
-                <div className="mt-auto hidden md:block">
-                     <NavItem icon={<LogOut size={24} />} label="Đăng xuất" active={false} onClick={handleLogout} />
-                </div>
-                 <div className="block md:hidden">
-                     <NavItem icon={<LogOut size={24} />} label="Đăng xuất" active={false} onClick={handleLogout} />
-                </div>
-            </nav>
-            <main className="flex-1 overflow-y-auto">
-                {renderView()}
-            </main>
-        </div>
-    );
-}
-
-export default MainApp;
+</body>
+</html>
