@@ -86,6 +86,9 @@
         const ArrowUpIcon = (props) => <Icon {...props}><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></Icon>;
         const BriefcaseIcon = (props) => <Icon {...props}><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2H10a2 2 0 0 0-2 2v16"></path></Icon>;
         const PrinterIcon = (props) => <Icon {...props}><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></Icon>;
+        const TrendingDownIcon = (props) => <Icon {...props}><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"></polyline><polyline points="17 18 23 18 23 12"></polyline></Icon>;
+        const TrendingUpIcon = (props) => <Icon {...props}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></Icon>;
+        const ArrowRightIcon = (props) => <Icon {...props}><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></Icon>;
 
         // --- Lấy các hàm từ Firebase đã được tải vào window ---
         const { initializeApp } = window.FirebaseApp;
@@ -198,7 +201,6 @@
             );
         };
 
-        // EntityManager - Nâng cấp với ô tìm kiếm
         const EntityManager = ({ entityName, entityLabel, fields, db, userId }) => {
             const [items, setItems] = useState([]);
             const [isLoading, setIsLoading] = useState(true);
@@ -1248,83 +1250,56 @@
         };
 
         const ReportingDashboard = ({ db, userId }) => {
-            const [stats, setStats] = useState({ revenueToday: 0, profitToday: 0, topProducts: [] });
-            const [weeklyRevenue, setWeeklyRevenue] = useState([]);
-            const [isLoading, setIsLoading] = useState(true);
-            const salesCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/salesTransactions`), [userId]);
-
-            useEffect(() => {
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const sevenDaysAgo = new Date();
-                sevenDaysAgo.setDate(today.getDate() - 6);
-                sevenDaysAgo.setHours(0, 0, 0, 0);
-                
-                const q = query(salesCollectionRef, where('createdAt', '>=', Timestamp.fromDate(sevenDaysAgo)));
-                
-                const unsubscribe = onSnapshot(q, (querySnapshot) => {
-                    setIsLoading(true);
-                    let revenueToday = 0;
-                    let profitToday = 0;
-                    const productSales = {};
-                    const weeklyData = Array(7).fill(0).map((_, i) => {
-                        const d = new Date();
-                        d.setDate(new Date().getDate() - i);
-                        return { date: d.toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit' }), revenue: 0 };
-                    }).reverse();
-
-                    querySnapshot.forEach(doc => {
-                        const sale = doc.data();
-                        const saleDate = sale.createdAt.toDate();
-
-                        if (saleDate >= today) {
-                            revenueToday += sale.totalAmount;
-                            profitToday += sale.totalAmount - (sale.totalCost || 0);
-                        }
-                        
-                        const dayStr = saleDate.toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit' });
-                        const dayIndex = weeklyData.findIndex(d => d.date === dayStr);
-                        if(dayIndex > -1) { weeklyData[dayIndex].revenue += sale.totalAmount; }
-
-                        sale.items.forEach(item => { productSales[item.name] = (productSales[item.name] || 0) + item.quantity; });
-                    });
-
-                    const topProducts = Object.entries(productSales).sort((a, b) => b[1] - a[1]).slice(0, 5);
-                    setStats({ revenueToday, profitToday, topProducts });
-                    setWeeklyRevenue(weeklyData);
-                    setIsLoading(false);
-                });
-                return unsubscribe;
-            }, [salesCollectionRef]);
+            const [reportType, setReportType] = useState(null); // null, 'inventory', 'customer_revenue', 'slow_moving'
             
-            const maxWeeklyRevenue = Math.max(...weeklyRevenue.map(d => d.revenue), 1);
+            const ReportCard = ({ title, description, icon, onClick }) => (
+                <div onClick={onClick} className="bg-white p-6 rounded-lg shadow-md hover:shadow-xl hover:border-blue-500 border-2 border-transparent cursor-pointer transition-all flex items-start gap-4">
+                    <div className="bg-blue-100 text-blue-600 p-3 rounded-lg">{icon}</div>
+                    <div>
+                        <h3 className="text-lg font-bold text-gray-800">{title}</h3>
+                        <p className="text-gray-600">{description}</p>
+                    </div>
+                </div>
+            );
 
+            if (reportType) {
+                // Render a specific report component based on reportType
+                // This would be where you place the logic for each specific report
+                return (
+                    <div className="p-6 bg-gray-50 min-h-screen">
+                        <button onClick={() => setReportType(null)} className="mb-4 font-semibold text-blue-600 hover:underline">
+                            &larr; Quay lại danh sách báo cáo
+                        </button>
+                        {reportType === 'inventory' && <div>Báo cáo Xuất Nhập Tồn (sẽ được xây dựng)</div>}
+                        {reportType === 'customer_revenue' && <div>Báo cáo Doanh thu theo Khách hàng (sẽ được xây dựng)</div>}
+                        {reportType === 'slow_moving' && <div>Báo cáo Hàng bán chậm (sẽ được xây dựng)</div>}
+                    </div>
+                );
+            }
+            
             return (
                 <div className="p-6 bg-gray-50 min-h-screen">
-                    <h2 className="text-3xl font-bold text-gray-800 mb-6">Báo cáo & Thống kê</h2>
-                    {isLoading ? <p>Đang tải báo cáo...</p> : (
-                        <>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                                <div className="bg-white p-6 rounded-lg shadow-md text-center"><h3 className="text-lg text-gray-500">Doanh thu hôm nay</h3><p className="text-3xl font-bold text-green-600">{stats.revenueToday.toLocaleString('vi-VN')}đ</p></div>
-                                <div className="bg-white p-6 rounded-lg shadow-md text-center"><h3 className="text-lg text-gray-500">Lợi nhuận hôm nay</h3><p className="text-3xl font-bold text-blue-600">{stats.profitToday.toLocaleString('vi-VN')}đ</p></div>
-                                <div className="bg-white p-6 rounded-lg shadow-md"><h3 className="text-lg text-center mb-2 text-gray-500">Sản phẩm bán chạy</h3>
-                                    <ul className="space-y-1">{stats.topProducts.map(([name, qty]) => <li key={name} className="flex justify-between"><span>{name}</span><span className="font-semibold">{qty}</span></li>)}</ul>
-                                </div>
-                            </div>
-                            <div className="bg-white p-6 rounded-lg shadow-md">
-                                <h3 className="text-xl font-bold mb-4">Doanh thu 7 ngày qua</h3>
-                                <div className="flex justify-around items-end h-64 gap-2 pt-4">
-                                    {weeklyRevenue.map(day => (
-                                        <div key={day.date} className="flex flex-col items-center flex-1 h-full justify-end">
-                                            <div className="text-xs text-gray-500 font-semibold">{day.revenue > 0 ? (day.revenue/1000).toFixed(0)+'k' : ''}</div>
-                                            <div className="w-full bg-blue-200 rounded-t-md hover:bg-blue-400 transition-colors" style={{ height: `${(day.revenue / maxWeeklyRevenue) * 100}%` }}></div>
-                                            <div className="text-sm font-semibold mt-1">{day.date.split(' ')[0]}</div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </>
-                    )}
+                    <h2 className="text-3xl font-bold text-gray-800 mb-6">Trung tâm Báo cáo</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <ReportCard 
+                            title="Báo cáo Xuất - Nhập - Tồn"
+                            description="Xem chi tiết tồn đầu, nhập, xuất và tồn cuối của sản phẩm trong một khoảng thời gian."
+                            icon={<LayersIcon />}
+                            onClick={() => alert("Chức năng đang được phát triển!")}
+                        />
+                         <ReportCard 
+                            title="Doanh thu theo Khách hàng"
+                            description="Xếp hạng khách hàng theo tổng giá trị mua hàng."
+                            icon={<TrendingUpIcon />}
+                            onClick={() => alert("Chức năng đang được phát triển!")}
+                        />
+                         <ReportCard 
+                            title="Hàng bán chậm"
+                            description="Liệt kê các sản phẩm có doanh số thấp để có kế hoạch xử lý."
+                            icon={<TrendingDownIcon />}
+                            onClick={() => alert("Chức năng đang được phát triển!")}
+                        />
+                    </div>
                 </div>
             );
         };
