@@ -23,6 +23,20 @@
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
         }
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #print-section, #print-section * {
+                visibility: visible;
+            }
+            #print-section {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+        }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -71,6 +85,8 @@
         const ArrowDownIcon = (props) => <Icon {...props}><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></Icon>;
         const ArrowUpIcon = (props) => <Icon {...props}><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></Icon>;
         const BriefcaseIcon = (props) => <Icon {...props}><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2H10a2 2 0 0 0-2 2v16"></path></Icon>;
+        const PrinterIcon = (props) => <Icon {...props}><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></Icon>;
+
 
         // --- Lấy các hàm từ Firebase đã được tải vào window ---
         const { initializeApp } = window.FirebaseApp;
@@ -100,6 +116,7 @@
                 md: 'max-w-md',
                 lg: 'max-w-lg',
                 xl: 'max-w-xl',
+                '3xl': 'max-w-3xl'
             }[size];
             return (
             <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4">
@@ -532,7 +549,7 @@
             );
         };
 
-        // Trang Bán hàng - GIAO DIỆN MỚI
+        // Trang Bán hàng - ĐÃ NÂNG CẤP
         const PointOfSale = ({ db, userId }) => {
             const [products, setProducts] = useState([]);
             const [inventoryLots, setInventoryLots] = useState([]);
@@ -544,6 +561,9 @@
             const [isProcessing, setIsProcessing] = useState(false);
             const searchInputRef = useRef(null);
             const [showCustomerAddModal, setShowCustomerAddModal] = useState(false);
+            const [lastSaleData, setLastSaleData] = useState(null);
+            const [showSuccessModal, setShowSuccessModal] = useState(false);
+            const [showPrintPreview, setShowPrintPreview] = useState(false);
 
 
             const customersCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/customers`), [userId]);
@@ -614,7 +634,10 @@
                         updates: [],
                         totalCost: 0,
                         totalAmount: cart.reduce((sum, item) => sum + item.salePrice * item.quantity, 0),
-                        saleItems: []
+                        saleItems: cart.map(item => ({
+                            productId: item.id, name: item.name, quantity: item.quantity,
+                            salePrice: item.salePrice,
+                        }))
                     };
 
                     for (const cartItem of cart) {
@@ -637,7 +660,7 @@
                             const lotData = lotDoc.data();
                             const sellFromThisLot = Math.min(quantityToSell, lotData.currentQuantity);
                             
-                            actionPlan.totalCost += lotData.importPrice;
+                            actionPlan.totalCost += sellFromThisLot * lotData.importPrice;
                             actionPlan.updates.push({ 
                                 lotId: lotDoc.id, 
                                 newQuantity: lotData.currentQuantity - sellFromThisLot 
@@ -645,12 +668,9 @@
                             
                             quantityToSell -= sellFromThisLot;
                         }
-                        actionPlan.saleItems.push({
-                            productId: cartItem.id, name: cartItem.name, quantity: cartItem.quantity,
-                            salePrice: cartItem.salePrice,
-                        });
                     }
-
+                    
+                    let saleId = '';
                     await runTransaction(db, async (transaction) => {
                         if (paymentMethod === 'credit' && selectedCustomer) {
                             const customerRef = doc(customersCollectionRef, selectedCustomer.id);
@@ -666,19 +686,29 @@
                         }
 
                         const salesRef = doc(collection(db, `artifacts/${appId}/users/${userId}/salesTransactions`));
+                        saleId = salesRef.id; // Lấy ID để dùng cho hóa đơn
                         transaction.set(salesRef, {
+                            id: saleId,
                             createdAt: Timestamp.now(), items: actionPlan.saleItems, 
                             totalAmount: actionPlan.totalAmount, totalCost: actionPlan.totalCost,
                             paymentMethod, 
                             customerId: selectedCustomer ? selectedCustomer.id : null,
-                            customerName: selectedCustomer ? selectedCustomer.name : 'Khách lẻ'
+                            customerName: selectedCustomer ? selectedCustomer.name : 'Khách lẻ',
+                            customerAddress: selectedCustomer ? selectedCustomer.address : null,
+                            customerTaxId: selectedCustomer ? selectedCustomer.taxId : null,
                         });
                     });
 
-                    alert("Giao dịch thành công!");
-                    setCart([]);
-                    setSelectedCustomer(null);
-                    setCustomerSearchTerm('');
+                    // Chuẩn bị dữ liệu cho hóa đơn và hiển thị modal thành công
+                    setLastSaleData({
+                        id: saleId,
+                        createdAt: new Date(),
+                        items: actionPlan.saleItems,
+                        totalAmount: actionPlan.totalAmount,
+                        customer: selectedCustomer
+                    });
+                    setShowSuccessModal(true);
+
                 } catch (error) {
                     console.error("Lỗi giao dịch:", error);
                     alert(`Giao dịch thất bại: ${error.message}`);
@@ -687,12 +717,18 @@
                 }
             };
             
+            const resetOrder = () => {
+                setCart([]);
+                setSelectedCustomer(null);
+                setCustomerSearchTerm('');
+                setProductSearchTerm('');
+                setShowSuccessModal(false);
+                setShowPrintPreview(false);
+            };
+            
             const handleCancelOrder = () => {
                 if(window.confirm("Bạn có chắc muốn hủy hóa đơn này?")) {
-                    setCart([]);
-                    setSelectedCustomer(null);
-                    setProductSearchTerm('');
-                    setCustomerSearchTerm('');
+                    resetOrder();
                 }
             }
 
@@ -732,7 +768,6 @@
 
             return (
                 <div className="flex h-screen">
-                    {/* Cột trái: Hóa đơn */}
                     <div className="w-3/5 p-4 flex flex-col bg-white">
                         <div className="p-4 bg-gray-50 rounded-lg mb-4">
                             <div className="flex items-center gap-2">
@@ -767,7 +802,6 @@
                             )}
                         </div>
 
-                        {/* Bảng sản phẩm trong giỏ hàng */}
                         <div className="flex-grow overflow-y-auto border-t border-b">
                             <table className="w-full">
                                 <thead className="sticky top-0 bg-gray-100">
@@ -802,7 +836,6 @@
                             </table>
                         </div>
 
-                        {/* Phần tổng kết và thanh toán */}
                         <div className="pt-4">
                             <div className="flex justify-between items-center text-xl mb-4">
                                 <span className="font-semibold">Tổng tiền hàng:</span>
@@ -824,7 +857,6 @@
                         </div>
                     </div>
 
-                    {/* Cột phải: Tìm kiếm sản phẩm */}
                     <div className="w-2/5 p-4 bg-gray-50 flex flex-col">
                         <div className="relative">
                             <Input 
@@ -867,9 +899,98 @@
                             </form>
                         </Modal>
                     )}
+                    {showSuccessModal && (
+                        <Modal title="Giao dịch thành công" onClose={resetOrder}>
+                            <div className="text-center">
+                                <p className="text-lg mb-6">Bạn muốn làm gì tiếp theo?</p>
+                                <div className="flex justify-center gap-4">
+                                    <PrimaryButton onClick={() => { setShowSuccessModal(false); setShowPrintPreview(true); }}>
+                                        <PrinterIcon size={20} /> In hóa đơn
+                                    </PrimaryButton>
+                                    <button onClick={resetOrder} className="px-4 py-2 bg-gray-200 text-gray-800 font-semibold rounded-lg hover:bg-gray-300">
+                                        Tạo đơn mới
+                                    </button>
+                                </div>
+                            </div>
+                        </Modal>
+                    )}
+                    {showPrintPreview && (
+                        <PrintPreview saleData={lastSaleData} onClose={() => setShowPrintPreview(false)} />
+                    )}
                 </div>
             );
         };
+        
+        const PrintPreview = ({ saleData, onClose }) => {
+            const handlePrint = () => {
+                window.print();
+            };
+
+            return (
+                <Modal title="Xem trước Hóa đơn" onClose={onClose} size="3xl">
+                    <div className="flex flex-col gap-4">
+                        <div id="print-section" className="p-8 bg-white text-black">
+                            <div className="text-center mb-8">
+                                <h1 className="text-2xl font-bold">Tạp Hóa Pro</h1>
+                                <p>Địa chỉ: 123 Đường ABC, Phường XYZ, Quận 1, TP. HCM</p>
+                                <p>Điện thoại: 0987 654 321</p>
+                            </div>
+                            <h2 className="text-xl font-bold text-center mb-6">HÓA ĐƠN BÁN HÀNG</h2>
+                            <div className="flex justify-between mb-4">
+                                <div>
+                                    <p><span className="font-semibold">Khách hàng:</span> {saleData.customer?.name || 'Khách lẻ'}</p>
+                                    {saleData.customer?.address && <p><span className="font-semibold">Địa chỉ:</span> {saleData.customer.address}</p>}
+                                    {saleData.customer?.taxId && <p><span className="font-semibold">MST:</span> {saleData.customer.taxId}</p>}
+                                </div>
+                                <div>
+                                    <p><span className="font-semibold">Số HĐ:</span> {saleData.id.slice(0, 8)}</p>
+                                    <p><span className="font-semibold">Ngày:</span> {saleData.createdAt.toLocaleString('vi-VN')}</p>
+                                </div>
+                            </div>
+                            <table className="w-full text-sm">
+                                <thead className="border-b-2 border-black">
+                                    <tr>
+                                        <th className="p-1 text-left">STT</th>
+                                        <th className="p-1 text-left">Tên hàng</th>
+                                        <th className="p-1 text-center">SL</th>
+                                        <th className="p-1 text-right">Đơn giá</th>
+                                        <th className="p-1 text-right">Thành tiền</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {saleData.items.map((item, index) => (
+                                        <tr key={index} className="border-b">
+                                            <td className="p-1">{index + 1}</td>
+                                            <td className="p-1">{item.name}</td>
+                                            <td className="p-1 text-center">{item.quantity}</td>
+                                            <td className="p-1 text-right">{item.salePrice.toLocaleString('vi-VN')}</td>
+                                            <td className="p-1 text-right">{(item.salePrice * item.quantity).toLocaleString('vi-VN')}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            <div className="flex justify-end mt-4">
+                                <div className="w-1/2">
+                                    <div className="flex justify-between font-bold text-lg">
+                                        <span>TỔNG CỘNG:</span>
+                                        <span>{saleData.totalAmount.toLocaleString('vi-VN')}đ</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="text-center mt-8">
+                                <p className="font-semibold">Cảm ơn quý khách và hẹn gặp lại!</p>
+                            </div>
+                        </div>
+                        <div className="text-center">
+                            <PrimaryButton onClick={handlePrint}>
+                                <PrinterIcon size={20} /> In
+                            </PrimaryButton>
+                        </div>
+                    </div>
+                </Modal>
+            );
+        };
+
 
         const DebtManagement = ({ db, userId }) => {
             const [customers, setCustomers] = useState([]);
