@@ -1250,8 +1250,111 @@
         };
 
         const ReportingDashboard = ({ db, userId }) => {
-            const [reportType, setReportType] = useState(null); // null, 'inventory', 'customer_revenue', 'slow_moving'
+            const [reportType, setReportType] = useState(null);
             
+            const [products, setProducts] = useState([]);
+            const [lots, setLots] = useState([]);
+            const [sales, setSales] = useState([]);
+            const [customers, setCustomers] = useState([]);
+            
+            const [startDate, setStartDate] = useState('');
+            const [endDate, setEndDate] = useState('');
+            const [threshold, setThreshold] = useState(5);
+            const [reportData, setReportData] = useState(null);
+            const [loadingReport, setLoadingReport] = useState(false);
+
+            useEffect(() => {
+                const productsRef = collection(db, `artifacts/${appId}/users/${userId}/products`);
+                const lotsRef = collection(db, `artifacts/${appId}/users/${userId}/inventory_lots`);
+                const salesRef = collection(db, `artifacts/${appId}/users/${userId}/salesTransactions`);
+                const customersRef = collection(db, `artifacts/${appId}/users/${userId}/customers`);
+
+                const unsubProducts = onSnapshot(productsRef, snapshot => setProducts(snapshot.docs.map(d => ({id: d.id, ...d.data()}))));
+                const unsubLots = onSnapshot(lotsRef, snapshot => setLots(snapshot.docs.map(d => ({id: d.id, ...d.data()}))));
+                const unsubSales = onSnapshot(salesRef, snapshot => setSales(snapshot.docs.map(d => ({id: d.id, ...d.data()}))));
+                const unsubCustomers = onSnapshot(customersRef, snapshot => setCustomers(snapshot.docs.map(d => ({id: d.id, ...d.data()}))));
+
+                return () => { unsubProducts(); unsubLots(); unsubSales(); unsubCustomers(); };
+            }, [db, userId]);
+
+            const generateReport = () => {
+                setLoadingReport(true);
+                setReportData(null);
+                const start = startDate ? new Date(startDate) : null;
+                const end = endDate ? new Date(endDate) : null;
+                if(start) start.setHours(0,0,0,0);
+                if(end) end.setHours(23,59,59,999);
+
+                if (reportType === 'customer_revenue') {
+                    const salesInPeriod = sales.filter(s => {
+                        const saleDate = s.createdAt.toDate();
+                        return (!start || saleDate >= start) && (!end || saleDate <= end);
+                    });
+                    const revenueByCustomer = salesInPeriod.reduce((acc, sale) => {
+                        const customerId = sale.customerId || 'guest-sale';
+                        const customerName = sale.customerName || 'Khách lẻ';
+                        if (!acc[customerId]) {
+                            acc[customerId] = { name: customerName, total: 0 };
+                        }
+                        acc[customerId].total += sale.totalAmount;
+                        return acc;
+                    }, {});
+                    const sortedData = Object.entries(revenueByCustomer)
+                        .map(([id, data]) => ({ id, ...data }))
+                        .sort((a, b) => b.total - a.total);
+                    setReportData(sortedData);
+                } else if (reportType === 'slow_moving') {
+                    const salesInPeriod = sales.filter(s => {
+                        const saleDate = s.createdAt.toDate();
+                        return (!start || saleDate >= start) && (!end || saleDate <= end);
+                    });
+                    const soldCount = salesInPeriod.flatMap(s => s.items).reduce((acc, item) => {
+                        acc[item.productId] = (acc[item.productId] || 0) + item.quantity;
+                        return acc;
+                    }, {});
+                    
+                    const slowMovingData = products.map(p => ({
+                        ...p,
+                        sold: soldCount[p.id] || 0,
+                        stock: lots.filter(l => l.productId === p.id).reduce((sum, l) => sum + l.currentQuantity, 0)
+                    })).filter(p => p.sold < threshold);
+                    setReportData(slowMovingData);
+                } else if (reportType === 'inventory') {
+                    // This logic can be complex, so we'll do a simplified version
+                    const data = products.map(p => {
+                        const lotsForProduct = lots.filter(l => l.productId === p.id);
+                        const salesForProduct = sales.flatMap(s => s.items).filter(i => i.productId === p.id);
+
+                        const startTimestamp = start ? Timestamp.fromDate(start) : null;
+                        const endTimestamp = end ? Timestamp.fromDate(end) : null;
+
+                        const openingStock = lotsForProduct
+                            .filter(l => l.createdAt < startTimestamp)
+                            .reduce((sum, l) => sum + l.initialQuantity, 0) - 
+                            sales.filter(s => s.createdAt < startTimestamp)
+                            .flatMap(s => s.items)
+                            .filter(i => i.productId === p.id)
+                            .reduce((sum, i) => sum + i.quantity, 0);
+
+                        const importedInPeriod = lotsForProduct
+                            .filter(l => (!start || l.createdAt >= startTimestamp) && (!end || l.createdAt <= endTimestamp))
+                            .reduce((sum, l) => sum + l.initialQuantity, 0);
+
+                        const soldInPeriod = sales
+                            .filter(s => (!start || s.createdAt >= startTimestamp) && (!end || s.createdAt <= endTimestamp))
+                            .flatMap(s => s.items)
+                            .filter(i => i.productId === p.id)
+                            .reduce((sum, i) => sum + i.quantity, 0);
+                        
+                        const closingStock = openingStock + importedInPeriod - soldInPeriod;
+
+                        return { id: p.id, name: p.name, openingStock, importedInPeriod, soldInPeriod, closingStock };
+                    });
+                    setReportData(data);
+                }
+                setLoadingReport(false);
+            };
+
             const ReportCard = ({ title, description, icon, onClick }) => (
                 <div onClick={onClick} className="bg-white p-6 rounded-lg shadow-md hover:shadow-xl hover:border-blue-500 border-2 border-transparent cursor-pointer transition-all flex items-start gap-4">
                     <div className="bg-blue-100 text-blue-600 p-3 rounded-lg">{icon}</div>
@@ -1261,19 +1364,62 @@
                     </div>
                 </div>
             );
+            
+            const ReportView = ({title, children}) => (
+                 <div className="p-6 bg-gray-50 min-h-screen">
+                    <button onClick={() => setReportType(null)} className="mb-6 font-semibold text-blue-600 hover:underline">
+                        &larr; Quay lại danh sách báo cáo
+                    </button>
+                    <h2 className="text-3xl font-bold text-gray-800 mb-4">{title}</h2>
+                    {children}
+                </div>
+            )
 
             if (reportType) {
-                // Render a specific report component based on reportType
-                // This would be where you place the logic for each specific report
                 return (
-                    <div className="p-6 bg-gray-50 min-h-screen">
-                        <button onClick={() => setReportType(null)} className="mb-4 font-semibold text-blue-600 hover:underline">
-                            &larr; Quay lại danh sách báo cáo
-                        </button>
-                        {reportType === 'inventory' && <div>Báo cáo Xuất Nhập Tồn (sẽ được xây dựng)</div>}
-                        {reportType === 'customer_revenue' && <div>Báo cáo Doanh thu theo Khách hàng (sẽ được xây dựng)</div>}
-                        {reportType === 'slow_moving' && <div>Báo cáo Hàng bán chậm (sẽ được xây dựng)</div>}
-                    </div>
+                    <ReportView title={`Báo cáo: ${
+                        reportType === 'inventory' ? 'Xuất - Nhập - Tồn' :
+                        reportType === 'customer_revenue' ? 'Doanh thu theo Khách hàng' : 'Hàng bán chậm'
+                    }`}>
+                        <div className="bg-white p-4 rounded-lg shadow-sm mb-6 flex items-end gap-4">
+                            <Input label="Từ ngày" type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+                            <Input label="Đến ngày" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                            {reportType === 'slow_moving' && (
+                                <Input label="Bán ít hơn (SL)" type="number" value={threshold} onChange={e => setThreshold(Number(e.target.value))} />
+                            )}
+                            <PrimaryButton onClick={generateReport} disabled={loadingReport}>
+                                {loadingReport ? 'Đang xử lý...' : 'Xem báo cáo'}
+                            </PrimaryButton>
+                        </div>
+                        
+                        <div className="bg-white p-4 rounded-lg shadow-md">
+                            {loadingReport && <p>Đang tạo báo cáo...</p>}
+                            {!loadingReport && reportData === null && <p>Chọn ngày và nhấn "Xem báo cáo" để bắt đầu.</p>}
+                            {!loadingReport && reportData?.length === 0 && <p>Không có dữ liệu cho lựa chọn này.</p>}
+                            {!loadingReport && reportData?.length > 0 && (
+                                <table className="w-full">
+                                    {reportType === 'customer_revenue' && (
+                                        <>
+                                            <thead><tr className="border-b"><th className="p-2 text-left">Khách hàng</th><th className="p-2 text-right">Tổng doanh thu</th></tr></thead>
+                                            <tbody>{reportData.map(d => <tr key={d.id} className="border-b"><td className="p-2">{d.name}</td><td className="p-2 text-right">{d.total.toLocaleString('vi-VN')}đ</td></tr>)}</tbody>
+                                        </>
+                                    )}
+                                     {reportType === 'slow_moving' && (
+                                        <>
+                                            <thead><tr className="border-b"><th className="p-2 text-left">Sản phẩm</th><th className="p-2 text-center">Đã bán</th><th className="p-2 text-center">Tồn kho</th></tr></thead>
+                                            <tbody>{reportData.map(d => <tr key={d.id} className="border-b"><td className="p-2">{d.name}</td><td className="p-2 text-center">{d.sold}</td><td className="p-2 text-center">{d.stock}</td></tr>)}</tbody>
+                                        </>
+                                    )}
+                                    {reportType === 'inventory' && (
+                                        <>
+                                            <thead><tr className="border-b"><th className="p-2 text-left">Sản phẩm</th><th className="p-2 text-center">Tồn đầu kỳ</th><th className="p-2 text-center">Nhập trong kỳ</th><th className="p-2 text-center">Bán trong kỳ</th><th className="p-2 text-center">Tồn cuối kỳ</th></tr></thead>
+                                            <tbody>{reportData.map(d => <tr key={d.id} className="border-b"><td className="p-2">{d.name}</td><td className="p-2 text-center">{d.openingStock}</td><td className="p-2 text-center">{d.importedInPeriod}</td><td className="p-2 text-center">{d.soldInPeriod}</td><td className="p-2 text-center font-bold">{d.closingStock}</td></tr>)}</tbody>
+                                        </>
+                                    )}
+                                </table>
+                            )}
+                        </div>
+                    </ReportView>
                 );
             }
             
@@ -1283,21 +1429,21 @@
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         <ReportCard 
                             title="Báo cáo Xuất - Nhập - Tồn"
-                            description="Xem chi tiết tồn đầu, nhập, xuất và tồn cuối của sản phẩm trong một khoảng thời gian."
+                            description="Xem chi tiết tồn đầu, nhập, xuất và tồn cuối của sản phẩm."
                             icon={<LayersIcon />}
-                            onClick={() => alert("Chức năng đang được phát triển!")}
+                            onClick={() => setReportType('inventory')}
                         />
                          <ReportCard 
                             title="Doanh thu theo Khách hàng"
                             description="Xếp hạng khách hàng theo tổng giá trị mua hàng."
                             icon={<TrendingUpIcon />}
-                            onClick={() => alert("Chức năng đang được phát triển!")}
+                            onClick={() => setReportType('customer_revenue')}
                         />
                          <ReportCard 
                             title="Hàng bán chậm"
                             description="Liệt kê các sản phẩm có doanh số thấp để có kế hoạch xử lý."
                             icon={<TrendingDownIcon />}
-                            onClick={() => alert("Chức năng đang được phát triển!")}
+                            onClick={() => setReportType('slow_moving')}
                         />
                     </div>
                 </div>
