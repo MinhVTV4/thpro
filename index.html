@@ -70,6 +70,7 @@
         const LayersIcon = (props) => <Icon {...props}><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></Icon>;
         const ArrowDownIcon = (props) => <Icon {...props}><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></Icon>;
         const ArrowUpIcon = (props) => <Icon {...props}><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></Icon>;
+        const BriefcaseIcon = (props) => <Icon {...props}><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2H10a2 2 0 0 0-2 2v16"></path></Icon>;
 
         // --- Lấy các hàm từ Firebase đã được tải vào window ---
         const { initializeApp } = window.FirebaseApp;
@@ -404,6 +405,8 @@
             const productsCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/products`), [userId]);
             const suppliersCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/suppliers`), [userId]);
             const lotsCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/inventory_lots`), [userId]);
+            const importSlipsCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/importSlips`), [userId]);
+
 
             useEffect(() => {
                 const unsubProducts = onSnapshot(productsCollectionRef, (snapshot) => setMasterProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
@@ -452,6 +455,16 @@
                         currentQuantity: item.quantity,
                         createdAt: Timestamp.now()
                     });
+                });
+                
+                const totalAmount = importList.reduce((sum, item) => sum + (item.importPrice * item.quantity), 0);
+                const importSlipRef = doc(importSlipsCollectionRef);
+                batch.set(importSlipRef, {
+                    createdAt: Timestamp.now(),
+                    items: importList,
+                    totalAmount,
+                    supplierId: selectedSupplierId,
+                    supplierName: selectedSupplier.name
                 });
 
                 try {
@@ -832,6 +845,123 @@
                 </div>
             );
         };
+        
+        // --- COMPONENT MỚI: CÔNG NỢ NHÀ CUNG CẤP ---
+        const SupplierDebtManagement = ({ db, userId }) => {
+            const [suppliers, setSuppliers] = useState([]);
+            const [importSlips, setImportSlips] = useState([]);
+            const [supplierPayments, setSupplierPayments] = useState([]);
+            const [selectedSupplierId, setSelectedSupplierId] = useState(null);
+            const [paymentAmount, setPaymentAmount] = useState('');
+            const [isProcessing, setIsProcessing] = useState(false);
+
+            const suppliersCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/suppliers`), [userId]);
+            const importSlipsCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/importSlips`), [userId]);
+            const supplierPaymentsCollectionRef = useMemo(() => collection(db, `artifacts/${appId}/users/${userId}/supplier_payments`), [userId]);
+
+            useEffect(() => {
+                const unsubSuppliers = onSnapshot(suppliersCollectionRef, snapshot => setSuppliers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+                const unsubImports = onSnapshot(importSlipsCollectionRef, snapshot => setImportSlips(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+                const unsubPayments = onSnapshot(supplierPaymentsCollectionRef, snapshot => setSupplierPayments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+                return () => { unsubSuppliers(); unsubImports(); unsubPayments(); };
+            }, []);
+
+            const suppliersWithDebt = useMemo(() => {
+                return suppliers.map(supplier => {
+                    const totalImport = importSlips
+                        .filter(slip => slip.supplierId === supplier.id)
+                        .reduce((sum, slip) => sum + slip.totalAmount, 0);
+                    const totalPayment = supplierPayments
+                        .filter(p => p.supplierId === supplier.id)
+                        .reduce((sum, p) => sum + p.amount, 0);
+                    return { ...supplier, debt: totalImport - totalPayment };
+                }).filter(s => s.debt > 0);
+            }, [suppliers, importSlips, supplierPayments]);
+
+            const selectedSupplierTransactions = useMemo(() => {
+                if (!selectedSupplierId) return [];
+                const imports = importSlips
+                    .filter(slip => slip.supplierId === selectedSupplierId)
+                    .map(slip => ({ ...slip, type: 'import' }));
+                const payments = supplierPayments
+                    .filter(p => p.supplierId === selectedSupplierId)
+                    .map(p => ({ ...p, type: 'payment' }));
+                
+                return [...imports, ...payments].sort((a,b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+            }, [selectedSupplierId, importSlips, supplierPayments]);
+
+            const handleRecordPayment = async () => {
+                if (!selectedSupplierId || !paymentAmount || Number(paymentAmount) <= 0) {
+                    alert("Vui lòng chọn nhà cung cấp và nhập số tiền hợp lệ.");
+                    return;
+                }
+                setIsProcessing(true);
+                const amount = Number(paymentAmount);
+                const selectedSupplier = suppliers.find(s => s.id === selectedSupplierId);
+
+                try {
+                    await addDoc(supplierPaymentsCollectionRef, {
+                        supplierId: selectedSupplierId,
+                        supplierName: selectedSupplier.name,
+                        amount: amount,
+                        createdAt: Timestamp.now()
+                    });
+                    alert("Ghi nhận thanh toán thành công!");
+                    setPaymentAmount('');
+                } catch (error) {
+                    console.error("Lỗi ghi nhận thanh toán NCC:", error);
+                    alert("Lỗi: " + error.message);
+                } finally {
+                    setIsProcessing(false);
+                }
+            };
+            
+            const selectedSupplierData = suppliersWithDebt.find(s => s.id === selectedSupplierId);
+
+            return (
+                <div className="p-6 bg-gray-50 min-h-screen grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="md:col-span-1">
+                        <h2 className="text-3xl font-bold text-gray-800 mb-6">Công nợ Nhà cung cấp</h2>
+                        <div className="bg-white p-4 rounded-lg shadow-md space-y-2 max-h-[75vh] overflow-y-auto">
+                            {suppliersWithDebt.length > 0 ? suppliersWithDebt.map(s => (
+                                <div key={s.id} onClick={() => setSelectedSupplierId(s.id)} className={`p-3 rounded-lg cursor-pointer ${selectedSupplierId === s.id ? 'bg-blue-100' : 'hover:bg-gray-100'}`}>
+                                    <p className="font-semibold">{s.name}</p>
+                                    <p className="text-red-600 font-bold">{s.debt.toLocaleString('vi-VN')}đ</p>
+                                </div>
+                            )) : <p className="text-gray-500">Không có công nợ nào.</p>}
+                        </div>
+                    </div>
+                    <div className="md:col-span-2">
+                        <h2 className="text-3xl font-bold text-gray-800 mb-6">Chi tiết công nợ NCC</h2>
+                        {selectedSupplierData ? (
+                            <div className="bg-white p-6 rounded-lg shadow-md">
+                                <h3 className="text-xl font-bold mb-2">{selectedSupplierData.name}</h3>
+                                <p className="text-2xl font-bold text-red-600 mb-4">Tổng nợ: {selectedSupplierData.debt?.toLocaleString('vi-VN')}đ</p>
+                                <div className="space-y-4 mb-6">
+                                    <Input label="Số tiền thanh toán" type="number" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} placeholder="Nhập số tiền trả cho NCC" />
+                                    <PrimaryButton onClick={handleRecordPayment} className="w-full" disabled={isProcessing}><LandmarkIcon size={20} /> Ghi nhận thanh toán</PrimaryButton>
+                                </div>
+                                <h4 className="font-semibold mt-6 border-t pt-4">Lịch sử giao dịch:</h4>
+                                <ul className="space-y-2 mt-2 max-h-60 overflow-y-auto">
+                                    {selectedSupplierTransactions.map((t, index) => (
+                                        <li key={index} className={`flex justify-between items-center p-2 rounded-md ${t.type === 'import' ? 'bg-red-50' : 'bg-green-50'}`}>
+                                            <div>
+                                                <p className="font-semibold">{t.type === 'import' ? 'Nhập hàng' : 'Thanh toán'}</p>
+                                                <p className="text-xs text-gray-500">{t.createdAt.toDate().toLocaleString('vi-VN')}</p>
+                                            </div>
+                                            <p className={`font-bold flex items-center gap-1 ${t.type === 'import' ? 'text-red-600' : 'text-green-700'}`}>
+                                                {t.type === 'import' ? <ArrowUpIcon size={14}/> : <ArrowDownIcon size={14}/>}
+                                                {(t.totalAmount || t.amount).toLocaleString('vi-VN')}đ
+                                            </p>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        ) : <p className="text-gray-500 mt-8">Chọn một nhà cung cấp để xem chi tiết.</p>}
+                    </div>
+                </div>
+            );
+        };
 
         const ReportingDashboard = ({ db, userId }) => {
             const [stats, setStats] = useState({ revenueToday: 0, profitToday: 0, topProducts: [] });
@@ -947,7 +1077,8 @@
                     case 'import': return <InventoryImport db={db} userId={user.uid} />;
                     case 'suppliers': return <SupplierManagement db={db} userId={user.uid} />;
                     case 'customers': return <CustomerManagement db={db} userId={user.uid} />;
-                    case 'debt': return <DebtManagement db={db} userId={user.uid} />;
+                    case 'customer_debt': return <DebtManagement db={db} userId={user.uid} />;
+                    case 'supplier_debt': return <SupplierDebtManagement db={db} userId={user.uid} />;
                     case 'reports': return <ReportingDashboard db={db} userId={user.uid} />;
                     case 'pos': default: return <PointOfSale db={db} userId={user.uid} />;
                 }
@@ -973,7 +1104,8 @@
                             <NavItem icon={<BarChart2Icon size={24} />} label="Báo cáo" active={view === 'reports'} onClick={() => setView('reports')} />
                             <NavItem icon={<PackageIcon size={24} />} label="Sản phẩm" active={view === 'products'} onClick={() => setView('products')} />
                             <NavItem icon={<ArchiveIcon size={24} />} label="Nhập hàng" active={view === 'import'} onClick={() => setView('import')} />
-                            <NavItem icon={<HandshakeIcon size={24} />} label="Công nợ" active={view === 'debt'} onClick={() => setView('debt')} />
+                            <NavItem icon={<HandshakeIcon size={24} />} label="Công nợ KH" active={view === 'customer_debt'} onClick={() => setView('customer_debt')} />
+                            <NavItem icon={<BriefcaseIcon size={24} />} label="Công nợ NCC" active={view === 'supplier_debt'} onClick={() => setView('supplier_debt')} />
                             <NavItem icon={<UserPlusIcon size={24} />} label="Khách hàng" active={view === 'customers'} onClick={() => setView('customers')} />
                             <NavItem icon={<TruckIcon size={24} />} label="Nhà cung cấp" active={view === 'suppliers'} onClick={() => setView('suppliers')} />
                         </div>
